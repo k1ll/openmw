@@ -106,7 +106,7 @@ namespace MWGui
       : Layout("openmw_console_layout.xml"),
         mCompilerContext (MWScript::CompilerContext::Type_Console, environment),
         mEnvironment (environment)
-#if DISPLAY_MATCHES
+#ifdef DISPLAY_MATCHES
         ,pagesize(5)
 #endif
     {
@@ -184,7 +184,7 @@ namespace MWGui
             current=complete( command->getCaption(), matches );
 
             command->setCaption(current);
-#if DISPLAY_MATCHES
+#ifdef DISPLAY_MATCHES
             /* Display completition possibilites when tab is pressed atleast twice (the input stayed the same ). */
             if( ( matches.size() > 1 ) && lastcomplete.size() && ( command->getCaption() == lastcomplete ) )
             {
