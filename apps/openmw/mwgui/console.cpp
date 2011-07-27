@@ -106,6 +106,9 @@ namespace MWGui
       : Layout("openmw_console_layout.xml"),
         mCompilerContext (MWScript::CompilerContext::Type_Console, environment),
         mEnvironment (environment)
+#if DISPLAY_MATCHES
+        ,pagesize(5)
+#endif
     {
         setCoord(10,10, w-10, h/2);
 
@@ -174,16 +177,42 @@ namespace MWGui
         if( key == MyGUI::KeyCode::Tab)
         {
             std::vector<std::string> matches;
+            std::string current;
+
             listNames();
-            command->setCaption(complete( command->getCaption(), matches ));
-#if 0
-            int i = 0;
-            for(std::vector<std::string>::iterator it=matches.begin(); it < matches.end(); it++,i++ )
+
+            current=complete( command->getCaption(), matches );
+
+            command->setCaption(current);
+#if DISPLAY_MATCHES
+            /* Display completition possibilites when tab is pressed atleast twice (the input stayed the same ). */
+            if( ( matches.size() > 1 ) && lastcomplete.size() && ( command->getCaption() == lastcomplete ) )
             {
-                printOK( *it );
-                if( i == 50 )
-                    break;
+                bool end=false;
+                /* Only display the current "page". */
+                for(std::vector<std::string>::iterator it=matches.begin()+(page*pagesize);it < matches.begin()+pagesize+(page*pagesize);it++)
+                {
+                    if(it<matches.end()) {
+                        printOK( *it );
+                    }
+                    else {
+                        end=true;
+                        break;
+                    }
+                }
+                if( end ) {
+                    page=0;
+                }
+                else {
+                    page++;
+                }
+                printOK( std::string("\n") );
             }
+            else
+            {
+                page=0;
+            }
+            lastcomplete=current;
 #endif
         }
 
