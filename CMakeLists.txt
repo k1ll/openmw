@@ -2,12 +2,15 @@ project(OpenMW)
 
 IF (APPLE)
     set(APP_BUNDLE_DIR "${OpenMW_BINARY_DIR}/OpenMW.app")
+
+    # using 10.6 sdk
+    set(CMAKE_OSX_SYSROOT "/Developer/SDKs/MacOSX10.6.sdk")
 ENDIF (APPLE)
 
 # Version
 
 set (OPENMW_VERSION_MAJOR 0)
-set (OPENMW_VERSION_MINOR 12)
+set (OPENMW_VERSION_MINOR 11)
 set (OPENMW_VERSION_RELEASE 0)
 
 set (OPENMW_VERSION "${OPENMW_VERSION_MAJOR}.${OPENMW_VERSION_MINOR}.${OPENMW_VERSION_RELEASE}")
@@ -29,9 +32,8 @@ if(DPKG_PROGRAM)
     set(MORROWIND_RESOURCE_FILES "/usr/share/games/openmw/resources/" CACHE PATH "location of OpenMW resources files")
 else()
     if (APPLE)
-        # set path inside bundle
-        set(MORROWIND_DATA_FILES "../data" CACHE PATH "location of Morrowind data files")
-        set(MORROWIND_RESOURCE_FILES "Contents/Resources/resources" CACHE PATH "location of OpenMW resources files")
+        set(MORROWIND_DATA_FILES "./data" CACHE PATH "location of Morrowind data files")
+        set(MORROWIND_RESOURCE_FILES "./resources" CACHE PATH "location of OpenMW resources files")
     else()
         set(MORROWIND_DATA_FILES "data" CACHE PATH "location of Morrowind data files")
         set(MORROWIND_RESOURCE_FILES "resources" CACHE PATH "location of OpenMW resources files")
@@ -378,7 +380,7 @@ endif()
 
 if (APPLE)
     configure_file(${OpenMW_SOURCE_DIR}/files/plugins.cfg.mac
-        "${APP_BUNDLE_DIR}/Contents/MacOS/plugins.cfg")
+        "${OpenMW_BINARY_DIR}/plugins.cfg")
 
     configure_file(${OpenMW_SOURCE_DIR}/files/mac/Info.plist
         "${APP_BUNDLE_DIR}/Contents/Info.plist" COPYONLY)
@@ -397,9 +399,6 @@ if (APPLE)
     configure_file(${OGRE_PLUGIN_DIR}/Plugin_ParticleFX.dylib
         "${APP_BUNDLE_DIR}/Contents/Plugins/Plugin_ParticleFX.dylib" COPYONLY)
 
-    configure_file(${OpenMW_SOURCE_DIR}/files/openmw.cfg
-        "${APP_BUNDLE_DIR}/Contents/MacOS/openmw.cfg")
-
 endif (APPLE)
 
 
@@ -410,8 +409,9 @@ if (CMAKE_COMPILER_IS_GNUCC)
 endif (CMAKE_COMPILER_IS_GNUCC)
 
 # Apple bundling
+# TODO REWRITE!
 if (APPLE)
-  set(MISC_FILES
+    set(MISC_FILES
         ${APP_BUNDLE_DIR}/Contents/MacOS/openmw.cfg
         ${APP_BUNDLE_DIR}/Contents/MacOS/plugins.cfg)
 
@@ -494,6 +494,8 @@ option(BUILD_ESMTOOL "build ESM inspector" ON)
 if (BUILD_ESMTOOL)
   add_subdirectory( apps/esmtool )
 endif()
+
+add_subdirectory( apps/launcher )
 
 if (WIN32)
   if (MSVC)
