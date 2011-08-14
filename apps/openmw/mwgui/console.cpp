@@ -181,12 +181,12 @@ namespace MWGui
 
             listNames();
 
-            current=complete( command->getCaption(), matches );
+            current=complete( command->getCaption(), matches, mNames );
 
             command->setCaption(current);
 #ifdef DISPLAY_MATCHES
             /* Display completition possibilites when tab is pressed atleast twice (the input stayed the same ). */
-            if( ( matches.size() > 1 ) && lastcomplete.size() && ( command->getCaption() == lastcomplete ) )
+            if( ( matches.size() > 1 ) && ( command->getCaption() == lastcomplete ) )
             {
                 bool end=false;
                 /* Only display the current "page". */
@@ -283,12 +283,13 @@ namespace MWGui
         command->setCaption("");
     }
 
-    std::string Console::complete( std::string input, std::vector<std::string> &matches )
+    std::string Console::complete( std::string input, std::vector<std::string> &matches, const std::vector<std::string> &in_keywords )
     {
         using namespace std;
         string output=input;
         string tmp=input;
         bool has_front_quote = false;
+        vector<string> keywords = in_keywords;
 
         /* Does the input string contain things that don't have to be completed? If yes erase them. */
         /* Are there quotation marks? */
@@ -332,12 +333,12 @@ namespace MWGui
 
         /* Is there still something in the input string? If not just display all commands and return the unchanged input. */
         if( tmp.length() == 0 ) {
-                matches=mNames;
+                matches=keywords;
             return input;
         }
 
         /* Iterate through the vector. */
-        for(vector<string>::iterator it=mNames.begin(); it < mNames.end();it++) {
+        for(vector<string>::iterator it=keywords.begin(); it < keywords.end();it++) {
             bool string_different=false;
 
             /* Is the string shorter than the input string? If yes skip it. */

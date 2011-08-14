@@ -86,7 +86,7 @@ namespace MWGui
 
     void acceptCommand(MyGUI::EditPtr _sender);
 
-    std::string complete( std::string input, std::vector<std::string> &matches );
+    std::string complete( std::string input, std::vector<std::string> &matches, const std::vector<std::string> &in_keywords );
   };
 }
 #endif
