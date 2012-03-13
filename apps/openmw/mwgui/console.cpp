@@ -106,6 +106,9 @@ namespace MWGui
       : Layout("openmw_console_layout.xml"),
         mCompilerContext (MWScript::CompilerContext::Type_Console, environment),
         mEnvironment (environment)
+#ifdef DISPLAY_MATCHES
+        ,pagesize(5)
+#endif
     {
         setCoord(10,10, w-10, h/2);
 
@@ -174,16 +177,42 @@ namespace MWGui
         if( key == MyGUI::KeyCode::Tab)
         {
             std::vector<std::string> matches;
+            std::string current;
+
             listNames();
-            command->setCaption(complete( command->getCaption(), matches ));
-#if 0
-            int i = 0;
-            for(std::vector<std::string>::iterator it=matches.begin(); it < matches.end(); it++,i++ )
+
+            current=complete( command->getCaption(), matches, mNames );
+
+            command->setCaption(current);
+#ifdef DISPLAY_MATCHES
+            /* Display completition possibilites when tab is pressed atleast twice (the input stayed the same ). */
+            if( ( matches.size() > 1 ) && ( command->getCaption() == lastcomplete ) )
             {
-                printOK( *it );
-                if( i == 50 )
-                    break;
+                bool end=false;
+                /* Only display the current "page". */
+                for(std::vector<std::string>::iterator it=matches.begin()+(page*pagesize);it < matches.begin()+pagesize+(page*pagesize);it++)
+                {
+                    if(it<matches.end()) {
+                        printOK( *it );
+                    }
+                    else {
+                        end=true;
+                        break;
+                    }
+                }
+                if( end ) {
+                    page=0;
+                }
+                else {
+                    page++;
+                }
+                printOK( std::string("\n") );
             }
+            else
+            {
+                page=0;
+            }
+            lastcomplete=current;
 #endif
         }
 
@@ -254,12 +283,13 @@ namespace MWGui
         command->setCaption("");
     }
 
-    std::string Console::complete( std::string input, std::vector<std::string> &matches )
+    std::string Console::complete( std::string input, std::vector<std::string> &matches, const std::vector<std::string> &in_keywords )
     {
         using namespace std;
         string output=input;
         string tmp=input;
         bool has_front_quote = false;
+        vector<string> keywords = in_keywords;
 
         /* Does the input string contain things that don't have to be completed? If yes erase them. */
         /* Are there quotation marks? */
@@ -303,12 +333,12 @@ namespace MWGui
 
         /* Is there still something in the input string? If not just display all commands and return the unchanged input. */
         if( tmp.length() == 0 ) {
-                matches=mNames;
+                matches=keywords;
             return input;
         }
 
         /* Iterate through the vector. */
-        for(vector<string>::iterator it=mNames.begin(); it < mNames.end();it++) {
+        for(vector<string>::iterator it=keywords.begin(); it < keywords.end();it++) {
             bool string_different=false;
 
             /* Is the string shorter than the input string? If yes skip it. */

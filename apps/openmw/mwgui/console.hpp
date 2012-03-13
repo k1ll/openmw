@@ -39,6 +39,11 @@ namespace MWGui
         /// \note If mNames is not empty, this function is a no-op.
         /// \note The list may contain duplicates (if a name is a keyword and an identifier at the same
         /// time).
+#ifdef DISPLAY_MATCHES
+        std::string lastcomplete;
+        const int pagesize;
+        int page;
+#endif
 
   public:
     MyGUI::EditPtr command;
@@ -81,7 +86,7 @@ namespace MWGui
 
     void acceptCommand(MyGUI::EditPtr _sender);
 
-    std::string complete( std::string input, std::vector<std::string> &matches );
+    std::string complete( std::string input, std::vector<std::string> &matches, const std::vector<std::string> &in_keywords );
   };
 }
 #endif
