@@ -102,13 +102,12 @@ namespace MWGui
     }
 
     Console::Console(int w, int h, MWWorld::Environment& environment,
-        const Compiler::Extensions& extensions)
+        const Compiler::Extensions& extensions, int tabCompletionMode)
       : Layout("openmw_console_layout.xml"),
         mCompilerContext (MWScript::CompilerContext::Type_Console, environment),
-        mEnvironment (environment)
-#ifdef DISPLAY_MATCHES
-        ,pagesize(5)
-#endif
+        mEnvironment (environment),
+        completionMode(tabCompletionMode),
+        pagesize(5)
     {
         setCoord(10,10, w-10, h/2);
 
@@ -181,39 +180,40 @@ namespace MWGui
 
             listNames();
 
-            current=complete( command->getCaption(), matches, mNames );
-
-            command->setCaption(current);
-#ifdef DISPLAY_MATCHES
-            /* Display completition possibilites when tab is pressed atleast twice (the input stayed the same ). */
-            if( ( matches.size() > 1 ) && ( command->getCaption() == lastcomplete ) )
+            if( completionMode >= 1 )
             {
-                bool end=false;
-                /* Only display the current "page". */
-                for(std::vector<std::string>::iterator it=matches.begin()+(page*pagesize);it < matches.begin()+pagesize+(page*pagesize);it++)
+                current=complete( command->getCaption(), matches, mNames );
+
+                command->setCaption(current);
+                /* Display completition possibilites when tab is pressed atleast twice (the input stayed the same ). */
+                if( ( completionMode == 2 ) && ( matches.size() > 1 ) && ( command->getCaption() == lastcomplete ) )
                 {
-                    if(it<matches.end()) {
-                        printOK( *it );
+                    bool end=false;
+                    /* Only display the current "page". */
+                    for(std::vector<std::string>::iterator it=matches.begin()+(page*pagesize);it < matches.begin()+pagesize+(page*pagesize);it++)
+                    {
+                        if(it<matches.end()) {
+                            printOK( *it );
+                        }
+                        else {
+                            end=true;
+                            break;
+                        }
+                    }
+                    if( end ) {
+                        page=0;
                     }
                     else {
-                        end=true;
-                        break;
+                        page++;
                     }
+                    printOK( std::string("\n") );
                 }
-                if( end ) {
+                else
+                {
                     page=0;
                 }
-                else {
-                    page++;
-                }
-                printOK( std::string("\n") );
+                lastcomplete=current;
             }
-            else
-            {
-                page=0;
-            }
-            lastcomplete=current;
-#endif
         }
 
         if(command_history.empty()) return;

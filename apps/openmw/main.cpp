@@ -125,6 +125,9 @@ bool parseOptions (int argc, char** argv, OMW::Engine& engine, Files::Configurat
 
         ("report-focus", boost::program_options::value<bool>()->implicit_value(true)
             ->default_value(false), "write name of focussed object to cout")
+
+        ("tab-completion", boost::program_options::value<int>()->implicit_value(0)
+            ->default_value(1), "tab completion mode (0 = off, 1 = enabled, 2 = show possible keywords)")
         ;
 
     bpo::parsed_options valid_opts = bpo::command_line_parser(argc, argv)
@@ -232,6 +235,7 @@ bool parseOptions (int argc, char** argv, OMW::Engine& engine, Files::Configurat
     engine.setCompileAll(variables["script-all"].as<bool>());
     engine.setReportFocus(variables["report-focus"].as<bool>());
     engine.setAnimationVerbose(variables["anim-verbose"].as<bool>());
+    engine.setTabCompletionMode(variables["tab-completion"].as<int>());
 
     return true;
 }

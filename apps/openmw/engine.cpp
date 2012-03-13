@@ -175,6 +175,7 @@ bool OMW::Engine::frameRenderingQueued (const Ogre::FrameEvent& evt)
 OMW::Engine::Engine(Files::ConfigurationManager& configurationManager)
   : mOgre (0)
   , mFpsLevel(0)
+  , mTabCompletionMode(1)
   , mDebug (false)
   , mVerboseScripts (false)
   , mNewGame (false)
@@ -335,7 +336,7 @@ void OMW::Engine::go()
     MWScript::registerExtensions (mExtensions);
 
     mEnvironment.mWindowManager = new MWGui::WindowManager(mEnvironment,
-        mExtensions, mFpsLevel, mNewGame, mOgre, mCfgMgr.getLogPath().string() + std::string("/"));
+        mExtensions, mFpsLevel, mTabCompletionMode, mNewGame, mOgre, mCfgMgr.getLogPath().string() + std::string("/"));
 
     // Create sound system
     mEnvironment.mSoundManager = new MWSound::SoundManager(mOgre->getRoot(),
@@ -484,4 +485,9 @@ void OMW::Engine::showFPS(int level)
 void OMW::Engine::setEncoding(const std::string& encoding)
 {
     mEncoding = encoding;
+}
+
+void OMW::Engine::setTabCompletionMode(int tabCompletionMode)
+{
+    mTabCompletionMode = tabCompletionMode;
 }

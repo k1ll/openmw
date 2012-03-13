@@ -68,6 +68,7 @@ namespace OMW
             std::string mCellName;
             std::string mMaster;
             int mFpsLevel;
+            int mTabCompletionMode;
             bool mDebug;
             bool mVerboseScripts;
             bool mNewGame;
@@ -163,6 +164,8 @@ namespace OMW
             void setEncoding(const std::string& encoding);
 
             void setAnimationVerbose(bool animverbose);
+
+            void setTabCompletionMode(int tabCompletionMode);
 
         private:
             Files::ConfigurationManager& mCfgMgr;

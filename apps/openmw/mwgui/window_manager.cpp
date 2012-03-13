@@ -21,7 +21,7 @@
 using namespace MWGui;
 
 WindowManager::WindowManager(MWWorld::Environment& environment,
-    const Compiler::Extensions& extensions, int fpsLevel, bool newGame, OEngine::Render::OgreRenderer *mOgre, const std::string logpath)
+    const Compiler::Extensions& extensions, int fpsLevel, int tabCompletionMode, bool newGame, OEngine::Render::OgreRenderer *mOgre, const std::string logpath)
   : environment(environment)
   , dialogueWindow(nullptr)
   , mode(GM_Game)
@@ -31,6 +31,7 @@ WindowManager::WindowManager(MWWorld::Environment& environment,
   , allowed(newGame ? GW_None : GW_ALL)
 {
     showFPSLevel = fpsLevel;
+    mTabCompletionMode = tabCompletionMode;
 
     // Set up the GUI system
     mGuiManager = new OEngine::GUI::MyGUIManager(mOgre->getWindow(), mOgre->getScene(), false, logpath);
@@ -48,7 +49,7 @@ WindowManager::WindowManager(MWWorld::Environment& environment,
     menu = new MainMenu(w,h);
     map = new MapWindow();
     stats = new StatsWindow(*this);
-    console = new Console(w,h, environment, extensions);
+    console = new Console(w,h, environment, extensions, mTabCompletionMode);
     mJournal = new JournalWindow(*this);
     mMessageBoxManager = new MessageBoxManager(this);
 

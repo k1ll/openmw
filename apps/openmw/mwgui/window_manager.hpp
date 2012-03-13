@@ -82,7 +82,7 @@ namespace MWGui
     typedef std::vector<Faction> FactionList;
     typedef std::vector<int> SkillList;
 
-    WindowManager(MWWorld::Environment& environment, const Compiler::Extensions& extensions, int fpsLevel, bool newGame, OEngine::Render::OgreRenderer *mOgre, const std::string logpath);
+    WindowManager(MWWorld::Environment& environment, const Compiler::Extensions& extensions, int fpsLevel, int tabCompletionMode, bool newGame, OEngine::Render::OgreRenderer *mOgre, const std::string logpath);
     virtual ~WindowManager();
 
     void setGuiMode(GuiMode newMode);
@@ -219,6 +219,7 @@ namespace MWGui
     void updateVisible(); // Update visibility of all windows based on mode, shown and allowed settings
 
     int showFPSLevel;
+    int mTabCompletionMode;
     float mFPS;
     size_t mTriangleCount;
     size_t mBatchCount;
