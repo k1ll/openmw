@@ -181,6 +181,13 @@ if(APPLE)
     endif()
 endif(APPLE)
 
+if(BUILD_TGZ)
+    INSTALL(TARGETS openmw RUNTIME DESTINATION "." COMPONENT openmw)
+	exec_program("uname" ARGS "-m" OUTPUT_VARIABLE ARCH)
+	SET_TARGET_PROPERTIES(openmw
+		                  PROPERTIES OUTPUT_NAME openmw.${ARCH})
+endif(BUILD_TGZ)
+
 if (BUILD_WITH_CODE_COVERAGE)
   add_definitions (--coverage)
   target_link_libraries(openmw gcov)

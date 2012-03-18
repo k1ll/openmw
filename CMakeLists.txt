@@ -248,7 +248,7 @@ if(MYGUI_STATIC)
    add_definitions(-DMYGUI_STATIC)
 endif (MYGUI_STATIC)
 
-if (APPLE)
+if (APPLE OR BUILD_TGZ)
     # List used Ogre plugins
     SET(USED_OGRE_PLUGINS ${OGRE_RenderSystem_GL_LIBRARY_REL}
                           ${OGRE_Plugin_ParticleFX_LIBRARY_REL})
@@ -274,12 +274,14 @@ if (APPLE)
         set(OGRE_PLUGIN_DIR ${OGRE_PLUGIN_DIR_DBG})
     endif ()
 
-    configure_file(${OpenMW_SOURCE_DIR}/files/mac/Info.plist
-        "${APP_BUNDLE_DIR}/Contents/Info.plist")
+    if(APPLE)
+        configure_file(${OpenMW_SOURCE_DIR}/files/mac/Info.plist
+            "${APP_BUNDLE_DIR}/Contents/Info.plist")
 
-    configure_file(${OpenMW_SOURCE_DIR}/files/mac/openmw.icns
-        "${APP_BUNDLE_DIR}/Contents/Resources/OpenMW.icns" COPYONLY)
-endif (APPLE)
+        configure_file(${OpenMW_SOURCE_DIR}/files/mac/openmw.icns
+            "${APP_BUNDLE_DIR}/Contents/Resources/OpenMW.icns" COPYONLY)
+    endif(APPLE)
+endif (APPLE OR BUILD_TGZ)
 
 # Set up DEBUG define
 set_directory_properties(PROPERTIES COMPILE_DEFINITIONS_DEBUG DEBUG=1)
@@ -374,8 +376,162 @@ elseif (MSVC)
     set(CMAKE_STATIC_LINKER_FLAGS_RELEASE "${CMAKE_STATIC_LINKER_FLAGS_RELEASE} /LTCG")
 endif (CMAKE_CXX_COMPILER_ID STREQUAL GNU OR CMAKE_CXX_COMPILER_ID STREQUAL Clang)
 
-IF(NOT WIN32 AND NOT APPLE)
-    # Linux building
+#Dependencies not available through CMake: libfreeimage, libpthread, libuuid, libFLAC, libvorbisenc, libvorbis, libogg, libzzip
+#They are added manually so the locations can't be configured via CMake 
+if(BUILD_TGZ)
+	message(TGZ PKG SPRT)
+
+	set(PACKAGE_MAINTAINER "unkown")
+    SET(CPACK_PACKAGE_VENDOR "OpenMW.org")
+    SET(CPACK_PACKAGE_VERSION ${OPENMW_VERSION})
+    SET(CPACK_PACKAGE_VERSION_MAJOR ${OPENMW_VERSION_MAJOR})
+    SET(CPACK_PACKAGE_VERSION_MINOR ${OPENMW_VERSION_MINOR})
+    SET(CPACK_PACKAGE_VERSION_PATCH ${OPENMW_VERSION_RELEASE})
+    SET(CPACK_PACKAGE_EXECUTABLES "openmw;OpenMW;esmtool;Esmtool;omwlauncher;OpenMW Launcher")
+    SET(CPACK_PACKAGE_DESCRIPTION_FILE "${OpenMW_SOURCE_DIR}/readme.txt")
+    SET(CPACK_RESOURCE_FILE_LICENSE "${OpenMW_SOURCE_DIR}/GPL3.txt")
+
+    SET(CPACK_GENERATOR "TGZ")
+    SET(CPACK_PACKAGE_NAME "openmw")
+    exec_program("uname" ARGS "" OUTPUT_VARIABLE KERNEL)
+    exec_program("uname" ARGS "-m" OUTPUT_VARIABLE ARCH)
+	if(ARCH MATCHES "x86_64")
+		set(ARCH "64Bit")
+	else(ARCH MATCHES "x86_64")
+		set(ARCH "")
+	endif(ARCH MATCHES "x86_64")
+	SET(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${KERNEL}-${ARCH}")
+
+	SET(CPACK_INCLUDE_TOPLEVEL_DIRECTORY 1)
+
+	#Install GPL3.txt and readme.txt
+	INSTALL(FILES "${OpenMW_SOURCE_DIR}/GPL3.txt" DESTINATION "." PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+	INSTALL(FILES "${OpenMW_SOURCE_DIR}/readme.txt" DESTINATION "." PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+
+    #Install icon and desktop file
+    INSTALL(FILES "${OpenMW_SOURCE_DIR}/files/openmw.desktop" DESTINATION "." PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+    INSTALL(FILES "${OpenMW_SOURCE_DIR}/apps/launcher/resources/images/openmw.png" DESTINATION "." PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+
+    #Install global configuration files
+    INSTALL(FILES "${OpenMW_BINARY_DIR}/openmw.cfg.install" DESTINATION "." RENAME "openmw.cfg" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+    configure_file(${OpenMW_SOURCE_DIR}/files/plugins.cfg.local
+        "${OpenMW_BINARY_DIR}/plugins.cfg")
+    INSTALL(FILES "${OpenMW_BINARY_DIR}/plugins.cfg" DESTINATION "." PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+
+    #Install resources, launcher.qss and launcher.cfg
+    INSTALL(DIRECTORY "${OpenMW_BINARY_DIR}/resources" DESTINATION "." FILE_PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "Resources")
+    INSTALL(FILES "${OpenMW_BINARY_DIR}/launcher.qss" DESTINATION "./resources")
+	#Fallback like in launcher/CMakeLists.txt
+    INSTALL(FILES "${OpenMW_BINARY_DIR}/launcher.qss" DESTINATION ".")
+    INSTALL(FILES "${OpenMW_BINARY_DIR}/launcher.cfg" DESTINATION ".")
+
+	#INSTALL(FILES "${OGRE_PLUGIN_DIR}/RenderSystem_GL.so" DESTINATION "./Plugins/" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+	#INSTALL(FILES "${OGRE_PLUGIN_DIR}/Plugin_OctreeSceneManager.so" DESTINATION "./Plugins/" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+	#INSTALL(FILES "${OGRE_PLUGIN_DIR}/Plugin_ParticleFX.so" DESTINATION "./Plugins/" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+
+	#TODO:This can be used with the next version - when FindOgre.cmake is updated
+	FOREACH(plugin ${USED_OGRE_PLUGINS})
+		INSTALL(FILES "${OGRE_PLUGIN_DIR}/${plugin}.so" DESTINATION "./Plugins/" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+	ENDFOREACH()
+
+	set(FREEIMAGE_LIBRARY "/usr/lib/libfreeimage.so.3")
+	#Don't package pthread it's just too system dependant
+	#set(PTHREAD_LIBRARY "/lib/libpthread.so.0")
+	set(UUID_LIBRARY "/lib/libuuid.so.1")
+	set(FLAC_LIBRARY "/usr/lib/libFLAC.so")
+	set(VORBISENC_LIBRARY "/usr/lib/libvorbisenc.so")
+	set(VORBIS_LIBRARY "/usr/lib/libvorbis.so")
+	set(OGG_LIBRARY "/usr/lib/libogg.so")
+	set(ZZIP_LIBRARY "/usr/lib/libzzip.so")
+	#set(PNG_LIBRARY "/lib/libpng12.so.0")
+
+	#TODO: There are still many other libraries linked into the binaries or libraries which may not be present on all systems. What should we do with them? 
+	#TODO: Use find_package for libboost_date_time aswell - Ogre depends on it
+    exec_program("dirname" ARGS ${Boost_FILESYSTEM_LIBRARY} OUTPUT_VARIABLE BOOSTDIR)
+    SET(Boost_DATE_TIME_LIBRARY ${BOOSTDIR}/libboost_date_time.so)
+
+	#FIXME: Item names do not correspond linked names. How can we find those?
+
+	#Reading symbolic links and copying the libs into ./lib
+	INSTALL(DIRECTORY DESTINATION "./lib" COMPONENT "openmw")
+
+	#TODO: Remove unnecessary commands and messages
+	#TODO: Need better readlink algorithm for stuff like openal
+	exec_program("dirname" ARGS ${OPENAL_LIBRARY} OUTPUT_VARIABLE OPENAL_DIRNAME)
+	exec_program("readlink" ARGS ${OPENAL_LIBRARY} OUTPUT_VARIABLE NEXT_OPENAL_LINK)
+	exec_program("readlink" ARGS "${OPENAL_DIRNAME}/${NEXT_OPENAL_LINK}" OUTPUT_VARIABLE REAL_OPENAL_LIBRARY)
+#	message("${NEXT_OPENAL_LINK}")
+#	message("${REAL_OPENAL_LIBRARY}")
+	#TODO: We need to get rid of things like this extra stuff for pthread and freeimage ...
+	#exec_program("readlink" ARGS ${PTHREAD_LIBRARY} OUTPUT_VARIABLE PTHREAD_READLINK)
+	#INSTALL(FILES "/lib/${PTHREAD_READLINK}" DESTINATION "./lib" RENAME "libpthread.so.0" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+	exec_program("readlink" ARGS ${FREEIMAGE_LIBRARY} OUTPUT_VARIABLE FREEIMAGE_READLINK)
+	INSTALL(FILES "/usr/lib/${FREEIMAGE_READLINK}" DESTINATION "./lib" RENAME "libfreeimage.so.3" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+
+	#Libs that are linked with major version numbers
+	set(LIBITEMS ${BULLET_DYNAMICS_LIBRARY} ${BULLET_COLLISION_LIBRARY} ${BULLET_MATH_LIBRARY} ${BULLET_SOFTBODY_LIBRARY}
+	${MPG123_LIBRARY} ${FREETYPE_LIBRARY} ${SNDFILE_LIBRARY} ${PNG_LIBRARY} ${UUID_LIBRARY}	${FLAC_LIBRARY}
+	${VORBISENC_LIBRARY} ${VORBIS_LIBRARY} ${OGG_LIBRARY} ${ZZIP_LIBRARY}  "${OPENAL_DIRNAME}/${REAL_OPENAL_LIBRARY}")
+	message("Libraries linked with major version:")
+foreach(CURRENT_ITEM ${LIBITEMS})
+	message("${CURRENT_ITEM}")
+endforeach(CURRENT_ITEM)
+foreach(CURRENT_ITEM ${LIBITEMS})
+	exec_program("readlink" ARGS ${CURRENT_ITEM} OUTPUT_VARIABLE ITEM_READLINK)
+	#message("${ITEM_READLINK}")
+	if("${ITEM_READLINK}" STREQUAL "")
+		exec_program("basename" ARGS ${CURRENT_ITEM} OUTPUT_VARIABLE ITEM_NAME)
+		string(REGEX REPLACE "(.+\\.so\\.[0-9]+)\\.[0-9]+\\.[0-9]+" "\\1" ITEM_MAJOR_VERSION_NAME ${ITEM_NAME})
+		INSTALL(FILES "${CURRENT_ITEM}" DESTINATION "./lib" RENAME ${ITEM_MAJOR_VERSION_NAME} PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+#		message("${CURRENT_ITEM}")
+#		message("${ITEM_NAME}")
+	else()
+		exec_program("dirname" ARGS ${CURRENT_ITEM} OUTPUT_VARIABLE ITEM_DIRNAME)
+		exec_program("basename" ARGS ${CURRENT_ITEM} OUTPUT_VARIABLE ITEM_NAME)
+		exec_program("basename" ARGS ${ITEM_READLINK} OUTPUT_VARIABLE ITEM_READLINK_NAME)
+#		message("BASENAME: ${ITEM_NAME}")
+		string(REGEX REPLACE "(.+\\.so\\.[0-9]+)\\.[0-9]+\\.[0-9]+" "\\1" ITEM_MAJOR_VERSION_NAME ${ITEM_READLINK_NAME})
+		INSTALL(FILES "${ITEM_DIRNAME}/${ITEM_READLINK}" DESTINATION "./lib" RENAME ${ITEM_MAJOR_VERSION_NAME} PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+#		message("${ITEM_DIRNAME}/${ITEM_READLINK}")
+#		message("Major Version Name: ${ITEM_MAJOR_VERSION_NAME}")
+	endif("${ITEM_READLINK}" STREQUAL "")
+endforeach(CURRENT_ITEM)
+
+
+#Retrieve OGRE_LIB_DIR from OGRE_LIBRARIES
+string(REGEX REPLACE "optimized(.*)/libOgreMain.sodebug.*" "\\1" OGRE_LIB_DIR ${OGRE_LIBRARIES})
+
+	#Libs that are linked with the full version number
+	set(LIBITEMS ${Boost_DATE_TIME_LIBRARY} ${Boost_FILESYSTEM_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY} ${Boost_SYSTEM_LIBRARY} ${Boost_THREAD_LIBRARY}
+	${OIS_LIBRARY_REL} "${OGRE_LIB_DIR}/libOgreMain.so")
+	message("Libraries linked with full version:")
+foreach(CURRENT_ITEM ${LIBITEMS})
+	message("${CURRENT_ITEM}")
+endforeach(CURRENT_ITEM)
+foreach(CURRENT_ITEM ${LIBITEMS})
+	exec_program("readlink" ARGS ${CURRENT_ITEM} OUTPUT_VARIABLE ITEM_READLINK)
+	#message("${ITEM_READLINK}")
+	if("${ITEM_READLINK}" STREQUAL "")
+		INSTALL(FILES "${CURRENT_ITEM}" DESTINATION "./lib" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+		#message("${CURRENT_ITEM}")
+	else()
+		exec_program("dirname" ARGS ${CURRENT_ITEM} OUTPUT_VARIABLE ITEM_DIRNAME)
+		exec_program("basename" ARGS ${CURRENT_ITEM} OUTPUT_VARIABLE ITEM_NAME)
+		#message("BASENAME: ${ITEM_NAME}")
+		INSTALL(FILES "${ITEM_DIRNAME}/${ITEM_READLINK}" DESTINATION "./lib" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+		#message("${ITEM_DIRNAME}/${ITEM_READLINK}")
+	endif("${ITEM_READLINK}" STREQUAL "")
+endforeach(CURRENT_ITEM)
+
+	INSTALL(FILES "${OpenMW_SOURCE_DIR}/files/esmtool.sh" DESTINATION "." RENAME "esmtool" PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ WORLD_READ COMPONENT "esmtool")
+	INSTALL(FILES "${OpenMW_SOURCE_DIR}/files/omwlauncher.sh" DESTINATION "." RENAME "omwlauncher" PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ WORLD_READ COMPONENT "omwlauncher")
+	INSTALL(FILES "${OpenMW_SOURCE_DIR}/files/openmw.sh" DESTINATION "." RENAME "openmw" PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ WORLD_READ COMPONENT "openmw")
+
+    include(CPack)
+endif(BUILD_TGZ)
+
+IF(NOT WIN32 AND NOT APPLE AND NOT BUILD_TGZ)
+    ## Debian and non debian Linux building
     # Paths
     SET(BINDIR "${CMAKE_INSTALL_PREFIX}/bin" CACHE PATH "Where to install binaries")
     SET(LIBDIR "${CMAKE_INSTALL_PREFIX}/lib${LIB_SUFFIX}" CACHE PATH "Where to install libraries")
@@ -446,7 +602,7 @@ IF(NOT WIN32 AND NOT APPLE)
     # Install resources
     INSTALL(DIRECTORY "${OpenMW_BINARY_DIR}/resources" DESTINATION "${DATADIR}" COMPONENT "Resources")
     INSTALL(DIRECTORY DESTINATION "${DATADIR}/data" COMPONENT "Resources")
-ENDIF(NOT WIN32 AND NOT APPLE)
+ENDIF(NOT WIN32 AND NOT APPLE AND NOT BUILD_TGZ)
 
 if(WIN32)
     FILE(GLOB dll_files "${OpenMW_BINARY_DIR}/Release/*.dll")
