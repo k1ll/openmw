@@ -382,6 +382,7 @@ endif (CMAKE_CXX_COMPILER_ID STREQUAL GNU OR CMAKE_CXX_COMPILER_ID STREQUAL Clan
 #They are added manually so the locations can't be configured via CMake 
 if(BUILD_TGZ)
 	message(TGZ PKG SPRT)
+	find_package(Cg REQUIRED)
 
 	set(PACKAGE_MAINTAINER "unkown")
     SET(CPACK_PACKAGE_VENDOR "OpenMW.org")
@@ -446,6 +447,9 @@ if(BUILD_TGZ)
 	set(OGG_LIBRARY "/usr/lib/libogg.so")
 	set(ZZIP_LIBRARY "/usr/lib/libzzip.so")
 	#set(PNG_LIBRARY "/lib/libpng12.so.0")
+
+	#Cg always gets distributed only as libCg.so so we can copy it directly
+	INSTALL(FILES "${Cg_LIBRARY_REL}" DESTINATION "./lib" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
 
 	#TODO: There are still many other libraries linked into the binaries or libraries which may not be present on all systems. What should we do with them? 
 	#TODO: Use find_package for libboost_date_time aswell - Ogre depends on it
