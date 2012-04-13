@@ -450,6 +450,8 @@ if(BUILD_TGZ)
 	set(ZZIP_LIBRARY "/usr/lib/libzzip.so")
 	#set(PNG_LIBRARY "/lib/libpng12.so.0")
 
+	INSTALL(FILES "${MYGUI_LIB_DIR}/libMyGUIEngine.so.3.2.0" DESTINATION "./lib" RENAME "libMyGUIEngine.so.3" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+
 	#Cg always gets distributed only as libCg.so so we can copy it directly
 	INSTALL(FILES "${Cg_LIBRARY_REL}" DESTINATION "./lib" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
 
