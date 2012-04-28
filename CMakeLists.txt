@@ -513,7 +513,7 @@ string(REGEX REPLACE "optimized(.*)/libOgreMain.sodebug.*" "\\1" OGRE_LIB_DIR ${
 
 	#Libs that are linked with the full version number
 	set(LIBITEMS ${Boost_DATE_TIME_LIBRARY} ${Boost_FILESYSTEM_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY} ${Boost_SYSTEM_LIBRARY} ${Boost_THREAD_LIBRARY}
-	${OIS_LIBRARY_REL} "${OGRE_LIB_DIR}/libOgreMain.so")
+	${OIS_LIBRARY_REL} "${OGRE_LIB_DIR}/libOgreMain.so" "${OGRE_LIB_DIR}/libOgreTerrain.so")
 	message("Libraries linked with full version:")
 foreach(CURRENT_ITEM ${LIBITEMS})
 	message("${CURRENT_ITEM}")
