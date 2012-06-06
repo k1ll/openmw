@@ -60,17 +60,22 @@ namespace MWInput
       A_CycleWeaponRight,
       A_ToggleSneak,    //Toggles Sneak, add Push-Sneak later
       A_ToggleWalk, //Toggle Walking/Running
+      A_Crouch,
 
       A_QuickSave,
       A_QuickLoad,
       A_QuickMenu,
       A_GameMenu,
+      A_ToggleWeapon,
+      A_ToggleSpell,
+
+      A_Settings, // Temporary hotkey
 
       A_LAST            // Marker for the last item
     };
 
   // Class that handles all input and key bindings for OpenMW
-  class InputImpl : public Ogre::FrameListener
+  class InputImpl
   {
     OEngine::Input::DispatcherPtr disp;
     OEngine::Render::OgreRenderer &ogre;
@@ -83,28 +88,84 @@ namespace MWInput
     MWGui::WindowManager &windows;
     OMW::Engine& mEngine;
 
+    bool mDragDrop;
+
 
    /* InputImpl Methods */
+public:
+    void adjustMouseRegion(int width, int height)
+    {
+        input.adjustMouseClippingSize(width, height);
+    }
+private:
+    void toggleSpell()
+    {
+        if (windows.isGuiMode()) return;
+
+        DrawState state = player.getDrawState();
+        if (state == DrawState_Weapon || state == DrawState_Nothing)
+        {
+            player.setDrawState(DrawState_Spell);
+            std::cout << "Player has now readied his hands for spellcasting!\n";
+        }
+        else
+        {
+            player.setDrawState(DrawState_Nothing);
+            std::cout << "Player does not have any kind of attack ready now.\n";
+        }
+    }
+
+    void toggleWeapon()
+    {
+        if (windows.isGuiMode()) return;
+
+        DrawState state = player.getDrawState();
+        if (state == DrawState_Spell || state == DrawState_Nothing)
+        {
+            player.setDrawState(DrawState_Weapon);
+            std::cout << "Player is now drawing his weapon.\n";
+        }
+        else
+        {
+            player.setDrawState(DrawState_Nothing);
+            std::cout << "Player does not have any kind of attack ready now.\n";
+        }
+    }
 
     void screenshot()
     {
         mEngine.screenshot();
+
+        std::vector<std::string> empty;
+        windows.messageBox ("Screenshot saved", empty);
+    }
+
+    void showSettings()
+    {
+        if (mDragDrop)
+            return;
+
+        if (!windows.isGuiMode() || windows.getMode() != MWGui::GM_Settings)
+            windows.pushGuiMode(MWGui::GM_Settings);
     }
 
     /* toggleInventory() is called when the user presses the button to toggle the inventory screen. */
     void toggleInventory()
     {
-      using namespace MWGui;
+        using namespace MWGui;
 
-      GuiMode mode = windows.getMode();
+        if (mDragDrop)
+            return;
 
-      // Toggle between game mode and inventory mode
-      if(mode == GM_Game)
-        setGuiMode(GM_Inventory);
-      else if(mode == GM_Inventory)
-        setGuiMode(GM_Game);
+        bool gameMode = !windows.isGuiMode();
 
-      // .. but don't touch any other mode.
+        // Toggle between game mode and inventory mode
+        if(gameMode)
+            windows.pushGuiMode(GM_Inventory);
+        else if(windows.getMode() == GM_Inventory)
+            windows.popGuiMode();
+
+        // .. but don't touch any other mode.
     }
 
     // Toggle console
@@ -112,28 +173,36 @@ namespace MWInput
     {
       using namespace MWGui;
 
-      GuiMode mode = windows.getMode();
+      if (mDragDrop)
+        return;
+
+      bool gameMode = !windows.isGuiMode();
 
       // Switch to console mode no matter what mode we are currently
       // in, except of course if we are already in console mode
-      if(mode == GM_Console)
-        setGuiMode(GM_Game);
-      else setGuiMode(GM_Console);
+      if (!gameMode)
+      {
+          if (windows.getMode() == GM_Console)
+              windows.popGuiMode();
+          else
+              windows.pushGuiMode(GM_Console);
+      }
+      else
+          windows.pushGuiMode(GM_Console);
     }
 
     void toggleJournal()
     {
-      using namespace MWGui;
+        using namespace MWGui;
 
-      GuiMode mode = windows.getMode();
+        // Toggle between game mode and journal mode
+        bool gameMode = !windows.isGuiMode();
 
-      // Toggle between game mode and journal mode
-      if(mode == GM_Game)
-        setGuiMode(GM_Journal);
-      else if(mode == GM_Journal)
-        setGuiMode(GM_Game);
-
-      // .. but don't touch any other mode.
+        if(gameMode)
+            windows.pushGuiMode(GM_Journal);
+        else if(windows.getMode() == GM_Journal)
+            windows.popGuiMode();
+        // .. but don't touch any other mode.
     }
 
     void activate()
@@ -143,11 +212,13 @@ namespace MWInput
 
     void toggleAutoMove()
     {
+        if (windows.isGuiMode()) return;
         player.setAutoMove (!player.getAutoMove());
     }
 
     void toggleWalking()
     {
+        if (windows.isGuiMode()) return;
         player.toggleRunning();
     }
 
@@ -170,7 +241,8 @@ namespace MWInput
         poller(input),
         player(_player),
         windows(_windows),
-        mEngine (engine)
+        mEngine (engine),
+        mDragDrop(false)
     {
       using namespace OEngine::Input;
       using namespace OEngine::Render;
@@ -197,11 +269,14 @@ namespace MWInput
                       "Auto Move");
       disp->funcs.bind(A_ToggleWalk, boost::bind(&InputImpl::toggleWalking, this),
                       "Toggle Walk/Run");
-
+      disp->funcs.bind(A_ToggleWeapon,boost::bind(&InputImpl::toggleWeapon,this),
+                      "Draw Weapon");
+      disp->funcs.bind(A_ToggleSpell,boost::bind(&InputImpl::toggleSpell,this),
+                      "Ready hands");
+      disp->funcs.bind(A_Settings, boost::bind(&InputImpl::showSettings, this),
+                      "Show settings window");
       // Add the exit listener
       ogre.getRoot()->addFrameListener(&exit);
-      // Add ourselves as a frame listener to catch movement keys
-      ogre.getRoot()->addFrameListener(this);
 
       // Set up the mouse handler and tell it about the player camera
       mouse = MouseLookEventPtr(new MouseLookEvent(player.getRenderer()->getCamera()));
@@ -221,8 +296,7 @@ namespace MWInput
         lst->add(guiEvents,Event::EV_ALL);
       }
 
-      // Start out in game mode
-      setGuiMode(MWGui::GM_Game);
+      changeInputMode(false);
 
       /**********************************
         Key binding section
@@ -244,6 +318,9 @@ namespace MWInput
       disp->bind(A_AutoMove, KC_Z);
       disp->bind(A_ToggleSneak, KC_X);
       disp->bind(A_ToggleWalk, KC_C);
+      disp->bind(A_ToggleWeapon,KC_F);
+      disp->bind(A_ToggleSpell,KC_R);
+      disp->bind(A_Settings, KC_F2);
 
       // Key bindings for polled keys
       // NOTE: These keys are constantly being polled. Only add keys that must be checked each frame.
@@ -259,10 +336,18 @@ namespace MWInput
       poller.bind(A_MoveRight, KC_D);
       poller.bind(A_MoveForward, KC_W);
       poller.bind(A_MoveBackward, KC_S);
+      
+      poller.bind(A_Jump, KC_E);
+      poller.bind(A_Crouch, KC_LCONTROL);
+    }
+
+    void setDragDrop(bool dragDrop)
+    {
+        mDragDrop = dragDrop;
     }
 
     //NOTE: Used to check for movement keys
-    bool frameRenderingQueued (const Ogre::FrameEvent &evt)
+    void update ()
     {
         // Tell OIS to handle all input events
         input.capture();
@@ -276,7 +361,8 @@ namespace MWInput
         windows.update();
 
         // Disable movement in Gui mode
-        if (windows.isGuiMode()) return true;
+
+        if (windows.isGuiMode()) return;
 
         // Configure player movement according to keyboard input. Actual movement will
         // be done in the physics system.
@@ -306,19 +392,20 @@ namespace MWInput
         else
             player.setForwardBackward (0);
 
-        return true;
+        if (poller.isDown(A_Jump))
+            player.setUpDown (1);
+        else if (poller.isDown(A_Crouch))
+            player.setUpDown (-1);
+        else
+            player.setUpDown (0);
     }
 
     // Switch between gui modes. Besides controlling the Gui windows
     // this also makes sure input is directed to the right place
-    void setGuiMode(MWGui::GuiMode mode)
+    void changeInputMode(bool guiMode)
     {
-      // Tell the GUI what to show (this also takes care of the mouse
-      // pointer)
-      windows.setMode(mode);
-
       // Are we in GUI mode now?
-      if(windows.isGuiMode())
+      if(guiMode)
         {
           // Disable mouse look
           mouse->setCamera(NULL);
@@ -354,8 +441,34 @@ namespace MWInput
     delete impl;
   }
 
-  void MWInputManager::setGuiMode(MWGui::GuiMode mode)
+  void MWInputManager::update()
   {
-      impl->setGuiMode(mode);
+      impl->update();
+  }
+
+  void MWInputManager::setDragDrop(bool dragDrop)
+  {
+      impl->setDragDrop(dragDrop);
+  }
+
+  void MWInputManager::changeInputMode(bool guiMode)
+  {
+      impl->changeInputMode(guiMode);
+  }
+
+  void MWInputManager::processChangedSettings(const Settings::CategorySettingVector& changed)
+  {
+      bool changeRes = false;
+      for (Settings::CategorySettingVector::const_iterator it = changed.begin();
+        it != changed.end(); ++it)
+      {
+          if (it->first == "Video" && (
+            it->second == "resolution x"
+            || it->second == "resolution y"))
+                changeRes = true;
+      }
+
+      if (changeRes)
+          impl->adjustMouseRegion(Settings::Manager::getInt("resolution x", "Video"), Settings::Manager::getInt("resolution y", "Video"));
   }
 }

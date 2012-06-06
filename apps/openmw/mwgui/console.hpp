@@ -16,14 +16,15 @@
 #include "../mwscript/compilercontext.hpp"
 #include "../mwscript/interpretercontext.hpp"
 
+#include "referenceinterface.hpp"
+
 namespace MWGui
 {
-  class Console : private OEngine::GUI::Layout, private Compiler::ErrorHandler
+  class Console : private OEngine::GUI::Layout, private Compiler::ErrorHandler, public ReferenceInterface
   {
     private:
 
         MWScript::CompilerContext mCompilerContext;
-        MWWorld::Environment& mEnvironment;
         std::vector<std::string> mNames;
 
         bool compile (const std::string& cmd, Compiler::Output& output);
@@ -46,7 +47,17 @@ namespace MWGui
         const int pagesize;
         int page;
 
-  public:
+    public:
+
+        void setSelectedObject(const MWWorld::Ptr& object);
+        ///< Set the implicit object for script execution
+
+    protected:
+
+        virtual void onReferenceUnavailable();
+
+
+    public:
     MyGUI::EditPtr command;
     MyGUI::EditPtr history;
 
@@ -57,13 +68,15 @@ namespace MWGui
     StringList::iterator current;
     std::string editString;
 
-    Console(int w, int h, MWWorld::Environment& environment, const Compiler::Extensions& extensions, int tabCompletionMode);
+    Console(int w, int h, const Compiler::Extensions& extensions, int tabCompletionMode);
 
     void enable();
 
     void disable();
 
     void setFont(const std::string &fntName);
+
+    void onResChange(int width, int height);
 
     void clearHistory();
 

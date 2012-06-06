@@ -7,6 +7,7 @@
 #include <boost/filesystem.hpp>
 
 #include <components/esm_store/cell_store.hpp>
+#include <components/settings/settings.hpp>
 
 #include "../mwrender/debugging.hpp"
 #include "../mwrender/renderingmanager.hpp"
@@ -18,9 +19,12 @@
 #include "physicssystem.hpp"
 #include "cells.hpp"
 #include "localscripts.hpp"
+#include "timestamp.hpp"
 
 #include <openengine/bullet/physic.hpp>
 #include <openengine/ogre/fader.hpp>
+
+#include <OgreTimer.h>
 
 namespace Ogre
 {
@@ -51,7 +55,6 @@ namespace MWRender
 namespace MWWorld
 {
     class WeatherManager;
-    class Environment;
     class Player;
 
     /// \brief The game world and its visual representation
@@ -63,13 +66,15 @@ namespace MWWorld
             enum RenderMode
             {
                 Render_CollisionDebug,
-                Render_Wireframe
+                Render_Wireframe,
+                Render_Pathgrid,
+                Render_Compositors
             };
 
         private:
 
             MWRender::RenderingManager* mRendering;
-            
+
             MWWorld::WeatherManager* mWeatherManager;
 
             MWWorld::Scene *mWorldScene;
@@ -80,7 +85,6 @@ namespace MWWorld
             MWWorld::Globals *mGlobalVariables;
             MWWorld::PhysicsSystem *mPhysics;
             bool mSky;
-            Environment& mEnvironment;
             int mNextDynamicRecord;
 
             Cells mCells;
@@ -93,27 +97,47 @@ namespace MWWorld
 
             Ptr getPtrViaHandle (const std::string& handle, Ptr::CellStore& cellStore);
 
+            std::string mFacedHandle;
+            Ptr mFaced1;
+            Ptr mFaced2;
+            std::string mFaced1Name;
+            std::string mFaced2Name;
+            int mNumFacing;
+            std::map<std::string,std::string> mFallback;
+
+            unsigned long lastTick;
+            Ogre::Timer mTimer;
 
             int getDaysPerMonth (int month) const;
 
-            void moveObjectImp (Ptr ptr, float x, float y, float z);
+            bool moveObjectImp (Ptr ptr, float x, float y, float z);
+            ///< @return true if the active cell (cell player is in) changed
 
         public:
 
            World (OEngine::Render::OgreRenderer& renderer,
                 const Files::Collections& fileCollections,
                 const std::string& master, const boost::filesystem::path& resDir, bool newGame,
-                Environment& environment, const std::string& encoding);
+                const std::string& encoding, std::map<std::string,std::string> fallbackMap);
 
             ~World();
-            
+
             OEngine::Render::Fader* getFader();
 
             Ptr::CellStore *getExterior (int x, int y);
 
             Ptr::CellStore *getInterior (const std::string& name);
-            
+
+            void setWaterHeight(const float height);
+            void toggleWater();
+
             void adjustSky();
+
+            void setFallbackValues(std::map<std::string,std::string> fallbackMap);
+
+            std::string getFallback(std::string key);
+
+            std::string getFallback(std::string key, std::string def);
 
             MWWorld::Player& getPlayer();
 
@@ -125,9 +149,12 @@ namespace MWWorld
 
             bool hasCellChanged() const;
             ///< Has the player moved to a different cell, since the last frame?
-            
+
             bool isCellExterior() const;
             bool isCellQuasiExterior() const;
+
+            Ogre::Vector2 getNorthVector(Ptr::CellStore* cell);
+            ///< get north vector (OGRE coordinates) for given interior cell
 
             Globals::Data& getGlobalVariable (const std::string& name);
 
@@ -161,11 +188,14 @@ namespace MWWorld
             void setDay (int day);
             ///< Set in-game time day.
 
+            TimeStamp getTimeStamp() const;
+            ///< Return current in-game time stamp.
+
             bool toggleSky();
             ///< \return Resulting mode
-            
+
             void changeWeather(const std::string& region, const unsigned int id);
-            
+
             int getCurrentWeather() const;
 
             int getMasserPhase() const;
@@ -239,6 +269,19 @@ namespace MWWorld
 
             void update (float duration);
 
+            bool placeObject(MWWorld::Ptr object, float cursorX, float cursorY);
+            ///< place an object into the gameworld at the specified cursor position
+            /// @param object
+            /// @param cursor X (relative 0-1)
+            /// @param cursor Y (relative 0-1)
+            /// @return true if the object was placed, or false if it was rejected because the position is too far away
+
+            void dropObjectOnGround(MWWorld::Ptr object);
+
+            bool canPlaceObject(float cursorX, float cursorY);
+            ///< @return true if it is possible to place on object at specified cursor location
+
+            void processChangedSettings(const Settings::CategorySettingVector& settings);
     };
 }
 

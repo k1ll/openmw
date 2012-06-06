@@ -23,7 +23,13 @@ op 0x20006: PlayAnim
 op 0x20007: PlayAnim, explicit reference
 op 0x20008: LoopAnim
 op 0x20009: LoopAnim, explicit reference
-opcodes 0x2000a-0x3ffff unused
+op 0x2000a: Choice
+op 0x2000b: PCRaiseRank
+op 0x2000c: PCLowerRank
+op 0x2000d: PCJoinFaction
+op 0x2000e: PCGetRank implicit
+op 0x2000f: PCGetRank explicit
+opcodes 0x20010-0x3ffff unused
 
 Segment 4:
 (not implemented yet)
@@ -115,10 +121,29 @@ op 0x2000136: GetPCCell
 op 0x2000137: GetButtonPressed
 op 0x2000138: SkipAnim
 op 0x2000139: SkipAnim, expplicit reference
+op 0x200013a: AddTopic
 op 0x200013b: twf
 op 0x200013c: FadeIn
 op 0x200013d: FadeOut
 op 0x200013e: FadeTo
 op 0x200013f: GetCurrentWeather
 op 0x2000140: ChangeWeather
-opcodes 0x2000141-0x3ffffff unused
+op 0x2000141: GetWaterLevel
+op 0x2000142: SetWaterLevel
+op 0x2000143: ModWaterLevel
+op 0x2000144: ToggleWater, twa
+op 0x2000145: ToggleFogOfWar (tfow)
+op 0x2000146: TogglePathgrid
+op 0x2000147: AddSpell
+op 0x2000148: AddSpell, explicit reference
+op 0x2000149: RemoveSpell
+op 0x200014a: RemoveSpell, explicit reference
+op 0x200014b: GetSpell
+op 0x200014c: GetSpell, explicit reference
+op 0x200014d: ModDisposition
+op 0x200014e: ModDisposition, explicit reference
+op 0x200014f: ForceGreeting
+op 0x2000150: ForceGreeting, explicit reference
+op 0x2000151: ToggleFullHelp
+op 0x2000152: Goodbye
+opcodes 0x2000154-0x3ffffff unused

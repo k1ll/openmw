@@ -2,11 +2,19 @@
 #define MWGUI_DIALOGE_H
 
 #include "window_base.hpp"
+#include "referenceinterface.hpp"
 #include <boost/array.hpp>
+
+#include "../mwworld/ptr.hpp"
 
 namespace MWGui
 {
     class WindowManager;
+
+    namespace Widgets
+    {
+        class MWList;
+    }
 }
 
 /*
@@ -16,35 +24,60 @@ namespace MWGui
 
 namespace MWGui
 {
-    class DialogeHistory;
+    class DialogueHistory;
 
-    using namespace MyGUI;
-
-    class DialogueWindow: public WindowBase
+    class DialogueWindow: public WindowBase, public ReferenceInterface
     {
     public:
         DialogueWindow(WindowManager& parWindowManager);
 
-        void open();
-
         // Events
-        typedef delegates::CDelegate0 EventHandle_Void;
+        typedef MyGUI::delegates::CMultiDelegate0 EventHandle_Void;
 
         /** Event : Dialog finished, OK button clicked.\n
             signature : void method()\n
         */
         EventHandle_Void eventBye;
 
+        void startDialogue(MWWorld::Ptr actor, std::string npcName);
+        void stopDialogue();
+        void setKeywords(std::list<std::string> keyWord);
+        void removeKeyword(std::string keyWord);
+        void addText(std::string text);
+        void addTitle(std::string text);
+        void askQuestion(std::string question);
+        void goodbye();
+
+        // various service button visibilities, depending if the npc/creature talked to has these services
+        // make sure to call these before setKeywords()
+        void setShowTrade(bool show) { mShowTrade = show; }
+
     protected:
-        void onSelectTopic(MyGUI::List* _sender, size_t _index);
+        void onSelectTopic(std::string topic);
         void onByeClicked(MyGUI::Widget* _sender);
         void onHistoryClicked(MyGUI::Widget* _sender);
+        void onMouseWheel(MyGUI::Widget* _sender, int _rel);
+        void onWindowResize(MyGUI::Window* _sender);
+
+        virtual void onReferenceUnavailable();
 
     private:
         void updateOptions();
+        /**
+        *Helper function that add topic keyword in blue in a text.
+        */
+        std::string parseText(std::string text);
 
-        DialogeHistory*     history;
-        MyGUI::ListPtr      topicsList;
+        // various service button visibilities, depending if the npc/creature talked to has these services
+        bool mShowTrade;
+
+        bool mEnabled;
+
+        DialogueHistory*     history;
+        Widgets::MWList*      topicsList;
+        MyGUI::ProgressPtr pDispositionBar;
+        MyGUI::EditPtr pDispositionText;
+        std::map<std::string,std::string> pTopicsText;// this map links keyword and "real" text.
     };
 }
 #endif

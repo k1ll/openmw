@@ -1,6 +1,7 @@
 #include "physic.hpp"
 #include <btBulletDynamicsCommon.h>
 #include <btBulletCollisionCommon.h>
+#include <BulletCollision/CollisionShapes/btHeightfieldTerrainShape.h>
 #include <components/nifbullet/bullet_nif_loader.hpp>
 //#include <apps\openmw\mwworld\world.hpp>
 #include "CMotionState.h"
@@ -9,6 +10,8 @@
 #include "BtOgrePG.h"
 #include "BtOgreGP.h"
 #include "BtOgreExtras.h"
+
+#include <boost/lexical_cast.hpp>
 
 #define BIT(x) (1<<(x))
 
@@ -19,7 +22,8 @@ namespace Physic
         COL_NOTHING = 0, //<Collide with nothing
         COL_WORLD = BIT(0), //<Collide with world objects
         COL_ACTOR_INTERNAL = BIT(1), //<Collide internal capsule
-        COL_ACTOR_EXTERNAL = BIT(2) //<collide with external capsule
+        COL_ACTOR_EXTERNAL = BIT(2), //<collide with external capsule
+        COL_RAYCASTING = BIT(3)
     };
 
     PhysicActor::PhysicActor(std::string name)
@@ -134,10 +138,15 @@ namespace Physic
 
 
     RigidBody::RigidBody(btRigidBody::btRigidBodyConstructionInfo& CI,std::string name)
-        :btRigidBody(CI),mName(name)
+        : btRigidBody(CI)
+        , mName(name)
     {
+    }
 
-    };
+    RigidBody::~RigidBody()
+    {
+        delete getMotionState();
+    }
 
 
 
@@ -146,7 +155,8 @@ namespace Physic
 
 
 
-    PhysicEngine::PhysicEngine(BulletShapeLoader* shapeLoader)
+    PhysicEngine::PhysicEngine(BulletShapeLoader* shapeLoader) :
+        mDebugActive(0)
     {
         // Set up the collision configuration and dispatcher
         collisionConfiguration = new btDefaultCollisionConfiguration();
@@ -155,11 +165,12 @@ namespace Physic
         // The actual physics solver
         solver = new btSequentialImpulseConstraintSolver;
 
-        //TODO: memory leak?
-        btOverlappingPairCache* pairCache = new btSortedOverlappingPairCache();
+        //btOverlappingPairCache* pairCache = new btSortedOverlappingPairCache();
+        pairCache = new btSortedOverlappingPairCache();
+
         //pairCache->setInternalGhostPairCallback( new btGhostPairCallback() );
 
-        broadphase = new btDbvtBroadphase(pairCache);
+        broadphase = new btDbvtBroadphase();
 
         // The world.
         dynamicsWorld = new btDiscreteDynamicsWorld(dispatcher,broadphase,solver,collisionConfiguration);
@@ -173,6 +184,7 @@ namespace Physic
         mShapeLoader = shapeLoader;
 
         isDebugCreated = false;
+        mDebugDrawer = NULL;
     }
 
     void PhysicEngine::createDebugRendering()
@@ -198,16 +210,107 @@ namespace Physic
             createDebugRendering();
         }
         mDebugDrawer->setDebugMode(mode);
+        mDebugActive = mode;
+    }
+
+    bool  PhysicEngine::toggleDebugRendering()
+    {
+        setDebugRenderingMode(!mDebugActive);
+        return mDebugActive;
     }
 
     PhysicEngine::~PhysicEngine()
     {
+
+        RigidBodyContainer::iterator rb_it = RigidBodyMap.begin();
+        for (; rb_it != RigidBodyMap.end(); ++rb_it)
+        {
+            if (rb_it->second != NULL)
+            {
+                dynamicsWorld->removeRigidBody(rb_it->second);
+
+                delete rb_it->second;
+                rb_it->second = NULL;
+            }
+        }
+
+        PhysicActorContainer::iterator pa_it = PhysicActorMap.begin();
+        for (; pa_it != PhysicActorMap.end(); ++pa_it)
+        {
+            if (pa_it->second != NULL)
+            {
+                dynamicsWorld->removeCollisionObject(pa_it->second->externalGhostObject);
+                dynamicsWorld->removeCollisionObject(pa_it->second->internalGhostObject);
+                dynamicsWorld->removeAction(pa_it->second->mCharacter);
+
+                delete pa_it->second;
+                pa_it->second = NULL;
+            }
+        }
+
+        delete mDebugDrawer;
+
         delete dynamicsWorld;
         delete solver;
         delete collisionConfiguration;
         delete dispatcher;
         delete broadphase;
+        delete pairCache;
         delete mShapeLoader;
+    }
+
+    void PhysicEngine::addHeightField(float* heights,
+        int x, int y, float yoffset,
+        float triSize, float sqrtVerts)
+    {
+        const std::string name = "HeightField_"
+            + boost::lexical_cast<std::string>(x) + "_"
+            + boost::lexical_cast<std::string>(y);
+
+        // find the minimum and maximum heights (needed for bullet)
+        float minh;
+        float maxh;
+        for (int i=0; i<sqrtVerts*sqrtVerts; ++i)
+        {
+            float h = heights[i];
+            if (i==0)
+            {
+                minh = h;
+                maxh = h;
+            }
+            
+            if (h>maxh) maxh = h;
+            if (h<minh) minh = h;
+        }
+
+        btHeightfieldTerrainShape* hfShape = new btHeightfieldTerrainShape(
+            sqrtVerts, sqrtVerts, heights, 1,
+            minh, maxh, 2,
+            PHY_FLOAT,true);
+
+        hfShape->setUseDiamondSubdivision(true);
+
+        btVector3 scl(triSize, triSize, 1);
+        hfShape->setLocalScaling(scl);
+
+        CMotionState* newMotionState = new CMotionState(this,name);
+
+        btRigidBody::btRigidBodyConstructionInfo CI = btRigidBody::btRigidBodyConstructionInfo(0,newMotionState,hfShape);
+        RigidBody* body = new RigidBody(CI,name);
+        body->collide = true;
+        body->getWorldTransform().setOrigin(btVector3( (x+0.5)*triSize*(sqrtVerts-1), (y+0.5)*triSize*(sqrtVerts-1), (maxh+minh)/2.f));
+
+        addRigidBody(body);
+    }
+
+    void PhysicEngine::removeHeightField(int x, int y)
+    {
+        const std::string name = "HeightField_"
+            + boost::lexical_cast<std::string>(x) + "_"
+            + boost::lexical_cast<std::string>(y);
+
+        removeRigidBody(name);
+        deleteRigidBody(name);
     }
 
     RigidBody* PhysicEngine::createRigidBody(std::string mesh,std::string name,float scale)
@@ -226,45 +329,56 @@ namespace Physic
         RigidBody* body = new RigidBody(CI,name);
         body->collide = shape->collide;
         return body;
+
     }
 
     void PhysicEngine::addRigidBody(RigidBody* body)
     {
-        if(body->collide)
+        if(body)
         {
-            dynamicsWorld->addRigidBody(body,COL_WORLD,COL_WORLD|COL_ACTOR_INTERNAL|COL_ACTOR_EXTERNAL);
+            if(body->collide)
+            {
+                dynamicsWorld->addRigidBody(body,COL_WORLD,COL_WORLD|COL_ACTOR_INTERNAL|COL_ACTOR_EXTERNAL);
+            }
+            else
+            {
+                dynamicsWorld->addRigidBody(body,COL_RAYCASTING,COL_RAYCASTING|COL_WORLD);
+            }
+            body->setActivationState(DISABLE_DEACTIVATION);
+            RigidBody* oldBody = RigidBodyMap[body->mName];
+            if (oldBody != NULL)
+            {
+                dynamicsWorld->removeRigidBody(oldBody);
+                delete oldBody;
+            }
+
+            RigidBodyMap[body->mName] = body;
         }
-        else
-        {
-            dynamicsWorld->addRigidBody(body,COL_WORLD,COL_NOTHING);
-        }
-        body->setActivationState(DISABLE_DEACTIVATION);
-        RigidBodyMap[body->mName] = body;
     }
 
     void PhysicEngine::removeRigidBody(std::string name)
     {
-        std::map<std::string,RigidBody*>::iterator it = RigidBodyMap.find(name);
+        RigidBodyContainer::iterator it = RigidBodyMap.find(name);
         if (it != RigidBodyMap.end() )
         {
             RigidBody* body = it->second;
             if(body != NULL)
             {
                 // broadphase->getOverlappingPairCache()->removeOverlappingPairsContainingProxy(body->getBroadphaseProxy(),dispatcher);
-                /*std::map<std::string,PhysicActor*>::iterator it2 = PhysicActorMap.begin();
+                /*PhysicActorContainer::iterator it2 = PhysicActorMap.begin();
                   for(;it2!=PhysicActorMap.end();it++)
                   {
                   it2->second->internalGhostObject->getOverlappingPairCache()->removeOverlappingPairsContainingProxy(body->getBroadphaseProxy(),dispatcher);
                   it2->second->externalGhostObject->getOverlappingPairCache()->removeOverlappingPairsContainingProxy(body->getBroadphaseProxy(),dispatcher);
                   }*/
-                dynamicsWorld->removeRigidBody(RigidBodyMap[name]);
+                dynamicsWorld->removeRigidBody(body);
             }
         }
     }
 
     void PhysicEngine::deleteRigidBody(std::string name)
     {
-        std::map<std::string,RigidBody*>::iterator it = RigidBodyMap.find(name);
+        RigidBodyContainer::iterator it = RigidBodyMap.find(name);
         if (it != RigidBodyMap.end() )
         {
             RigidBody* body = it->second;
@@ -284,7 +398,7 @@ namespace Physic
 
     void PhysicEngine::stepSimulation(double deltaT)
     {
-        dynamicsWorld->stepSimulation(deltaT,1,1/50.);
+        dynamicsWorld->stepSimulation(deltaT,10, 1/60.0);
         if(isDebugCreated)
         {
             mDebugDrawer->step();
@@ -293,6 +407,10 @@ namespace Physic
 
     void PhysicEngine::addCharacter(std::string name)
     {
+        // Remove character with given name, so we don't make memory
+        // leak when character would be added twice
+        removeCharacter(name);
+
         PhysicActor* newActor = new PhysicActor(name);
         dynamicsWorld->addCollisionObject( newActor->externalGhostObject, COL_ACTOR_EXTERNAL, COL_WORLD |COL_ACTOR_EXTERNAL );
         dynamicsWorld->addCollisionObject( newActor->internalGhostObject, COL_ACTOR_INTERNAL, COL_WORLD |COL_ACTOR_INTERNAL );
@@ -303,7 +421,7 @@ namespace Physic
     void PhysicEngine::removeCharacter(std::string name)
     {
         //std::cout << "remove";
-        std::map<std::string,PhysicActor*>::iterator it = PhysicActorMap.find(name);
+        PhysicActorContainer::iterator it = PhysicActorMap.find(name);
         if (it != PhysicActorMap.end() )
         {
             PhysicActor* act = it->second;
@@ -311,7 +429,7 @@ namespace Physic
             {
                 /*broadphase->getOverlappingPairCache()->removeOverlappingPairsContainingProxy(act->externalGhostObject->getBroadphaseHandle(),dispatcher);
                   broadphase->getOverlappingPairCache()->removeOverlappingPairsContainingProxy(act->internalGhostObject->getBroadphaseHandle(),dispatcher);
-                  std::map<std::string,PhysicActor*>::iterator it2 = PhysicActorMap.begin();
+                  PhysicActorContainer::iterator it2 = PhysicActorMap.begin();
                   for(;it2!=PhysicActorMap.end();it++)
                   {
                   it->second->internalGhostObject->getOverlappingPairCache()->removeOverlappingPairsContainingProxy(act->externalGhostObject->getBroadphaseHandle(),dispatcher);
@@ -347,7 +465,7 @@ namespace Physic
 
         float d1 = 10000.;
         btCollisionWorld::ClosestRayResultCallback resultCallback1(from, to);
-        resultCallback1.m_collisionFilterMask = COL_WORLD;
+        resultCallback1.m_collisionFilterMask = COL_WORLD|COL_RAYCASTING;
         dynamicsWorld->rayTest(from, to, resultCallback1);
         if (resultCallback1.hasHit())
         {
@@ -371,5 +489,36 @@ namespace Physic
         }
 
         return std::pair<std::string,float>(name,d);
+    }
+
+    std::vector< std::pair<float, std::string> > PhysicEngine::rayTest2(btVector3& from, btVector3& to)
+    {
+        MyRayResultCallback resultCallback1;
+        resultCallback1.m_collisionFilterMask = COL_WORLD|COL_RAYCASTING;
+        dynamicsWorld->rayTest(from, to, resultCallback1);
+        std::vector< std::pair<float, btCollisionObject*> > results = resultCallback1.results;
+
+        MyRayResultCallback resultCallback2;
+        resultCallback2.m_collisionFilterMask = COL_ACTOR_INTERNAL|COL_ACTOR_EXTERNAL;
+        dynamicsWorld->rayTest(from, to, resultCallback2);
+        std::vector< std::pair<float, btCollisionObject*> > actorResults = resultCallback2.results;
+
+        std::vector< std::pair<float, std::string> > results2;
+
+        for (std::vector< std::pair<float, btCollisionObject*> >::iterator it=results.begin();
+            it != results.end(); ++it)
+        {
+            results2.push_back( std::make_pair( (*it).first, static_cast<RigidBody&>(*(*it).second).mName ) );
+        }
+
+        for (std::vector< std::pair<float, btCollisionObject*> >::iterator it=actorResults.begin();
+            it != actorResults.end(); ++it)
+        {
+            results2.push_back( std::make_pair( (*it).first, static_cast<PairCachingGhostObject&>(*(*it).second).mName ) );
+        }
+
+        std::sort(results2.begin(), results2.end(), MyRayResultCallback::cmp);
+
+        return results2;
     }
 }};

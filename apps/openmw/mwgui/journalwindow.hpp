@@ -18,16 +18,9 @@ namespace MWGui
             JournalWindow(WindowManager& parWindowManager);
             void open();
 
+            virtual void setVisible(bool visible); // only used to play close sound
+
         private:
-            enum ColorStyle
-            {
-                CS_Sub,
-                CS_Normal,
-                CS_Super
-            };
-
-            void onWindowResize(MyGUI::Window* window);
-
             void displayLeftText(std::string text);
             void displayRightText(std::string text);
 
@@ -41,7 +34,7 @@ namespace MWGui
             static const int lineHeight;
 
             MyGUI::WidgetPtr skillAreaWidget, skillClientWidget;
-            MyGUI::VScrollPtr skillScrollerWidget;
+            MyGUI::ScrollBar* skillScrollerWidget;
             int lastPos, clientHeight;
             MyGUI::EditPtr mLeftTextWidget;
             MyGUI::EditPtr mRightTextWidget;
@@ -50,6 +43,7 @@ namespace MWGui
             std::vector<std::string> leftPages;
             std::vector<std::string> rightPages;
             int mPageNumber; //store the number of the current left page
+            bool mVisible;
     };
 
 }

@@ -40,9 +40,9 @@ namespace ESMS
     RecListT<Clothing>          clothes;
     RecListT<LoadCNTC>          contChange;
     RecListT<Container>         containers;
-    RecListWithIDT<Creature>          creatures;
+    RecListWithIDT<Creature>    creatures;
     RecListT<LoadCREC>          creaChange;
-    RecListT<Dialogue>          dialogs;
+    RecListCaseT<Dialogue>      dialogs;
     RecListT<Door>              doors;
     RecListT<Enchantment>       enchants;
     RecListT<Faction>           factions;
@@ -53,7 +53,7 @@ namespace ESMS
     RecListT<Light>             lights;
     RecListT<Tool>              lockpicks;
     RecListT<Miscellaneous>     miscItems;
-    RecListWithIDT<NPC>               npcs;
+    RecListWithIDT<NPC>         npcs;
     RecListT<LoadNPCC>          npcChange;
     RecListT<Probe>             probes;
     RecListT<Race>              races;
@@ -74,7 +74,8 @@ namespace ESMS
     ScriptListT<Script>         scripts;
     IndexListT<MagicEffect>     magicEffects;
     IndexListT<Skill>           skills;
-    //RecListT<PathGrid>    pathgrids;
+    //RecListT<Pathgrid>          pathgrids;
+    PathgridList                pathgrids;
 
     // Special entry which is hardcoded and not loaded from an ESM
     IndexListT<Attribute>       attributes;
@@ -115,7 +116,7 @@ namespace ESMS
       recLists[REC_GLOB] = &globals;
       recLists[REC_GMST] = &gameSettings;
       recLists[REC_INGR] = &ingreds;
-      //recLists[REC_LAND] = &lands;
+      recLists[REC_LAND] = &lands;
       recLists[REC_LEVC] = &creatureLists;
       recLists[REC_LEVI] = &itemLists;
       recLists[REC_LIGH] = &lights;
@@ -124,7 +125,7 @@ namespace ESMS
       recLists[REC_MISC] = &miscItems;
       recLists[REC_NPC_] = &npcs;
       recLists[REC_NPCC] = &npcChange;
-      //recLists[REC_PGRD] = &pathgrids;
+      recLists[REC_PGRD] = &pathgrids;
       recLists[REC_PROB] = &probes;
       recLists[REC_RACE] = &races;
       recLists[REC_REGN] = &regions;

@@ -7,6 +7,28 @@
 
 MainDialog::MainDialog()
 {
+    // Create the settings manager and load default settings file
+    const std::string localdefault = mCfgMgr.getLocalPath().string() + "/settings-default.cfg";
+    const std::string globaldefault = mCfgMgr.getGlobalPath().string() + "/settings-default.cfg";
+
+    // prefer local
+    if (boost::filesystem::exists(localdefault))
+        mSettings.loadDefault(localdefault);
+    else if (boost::filesystem::exists(globaldefault))
+        mSettings.loadDefault(globaldefault);
+    else
+        throw std::runtime_error ("No default settings file found! Make sure the file \"settings-default.cfg\" was properly installed.");
+
+    // load user settings if they exist, otherwise just load the default settings as user settings
+    const std::string settingspath = mCfgMgr.getUserPath().string() + "/settings.cfg";
+    if (boost::filesystem::exists(settingspath))
+        mSettings.loadUser(settingspath);
+    else if (boost::filesystem::exists(localdefault))
+        mSettings.loadUser(localdefault);
+    else if (boost::filesystem::exists(globaldefault))
+        mSettings.loadUser(globaldefault);
+
+
     mIconWidget = new QListWidget;
     mIconWidget->setObjectName("IconWidget");
     mIconWidget->setViewMode(QListView::IconMode);
@@ -45,9 +67,28 @@ MainDialog::MainDialog()
     setWindowFlags(this->windowFlags() & ~Qt::WindowContextHelpButtonHint);
     setMinimumSize(QSize(575, 575));
 
+    // Install the stylesheet font
+    QFile file;
+    QFontDatabase fontDatabase;
+    
+    const QStringList fonts = fontDatabase.families();
+    
+    // Check if the font is installed
+    if (!fonts.contains("EB Garamond")) {
+      
+      QString font = QString::fromStdString((mCfgMgr.getGlobalDataPath() / "resources/mygui/EBGaramond-Regular.ttf").string());
+      file.setFileName(font);
+      
+      if (!file.exists()) {
+	  font = QString::fromStdString((mCfgMgr.getLocalPath() / "resources/mygui/EBGaramond-Regular.ttf").string());
+      }
+      
+      fontDatabase.addApplicationFont(font);
+    }
+    
     // Load the stylesheet
     QString config = QString::fromStdString((mCfgMgr.getGlobalDataPath() / "resources/launcher.qss").string());
-    QFile file(config);
+    file.setFileName(config);
 
     if (!file.exists()) {
         file.setFileName(QString::fromStdString((mCfgMgr.getLocalPath() / "launcher.qss").string()));
@@ -159,6 +200,11 @@ void MainDialog::closeEvent(QCloseEvent *event)
     // Now write all config files
     mDataFilesPage->writeConfig();
     mGraphicsPage->writeConfig();
+
+    // Save user settings
+    const std::string settingspath = mCfgMgr.getUserPath().string() + "/settings.cfg";
+    mSettings.saveUser(settingspath);
+
     event->accept();
 }
 
@@ -175,6 +221,7 @@ void MainDialog::play()
     QDir dir(QCoreApplication::applicationDirPath());
     QString game = dir.absoluteFilePath("openmw");
     QFile file(game);
+    game = "\"" + game + "\"";
 #else
     QString game = "./openmw";
     QFile file(game);

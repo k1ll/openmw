@@ -7,6 +7,9 @@
 
 #include "../mwmechanics/stat.hpp"
 
+#undef MYGUI_EXPORT
+#define MYGUI_EXPORT
+
 /*
   This file contains various custom widgets used in OpenMW.
  */
@@ -18,7 +21,46 @@ namespace MWGui
 
     namespace Widgets
     {
+        class MWEffectList;
+
         void fixTexturePath(std::string &path);
+
+        struct SpellEffectParams
+        {
+            SpellEffectParams()
+                : mMagnMin(-1)
+                , mMagnMax(-1)
+                , mRange(-1)
+                , mDuration(-1)
+                , mSkill(-1)
+                , mAttribute(-1)
+                , mEffectID(-1)
+                , mNoTarget(false)
+                , mIsConstant(false)
+            {
+            }
+
+            bool mNoTarget; // potion effects for example have no target (target is always the player)
+            bool mIsConstant; // constant effect means that duration will not be displayed
+
+            // value of -1 here means the effect is unknown to the player
+            short mEffectID;
+
+            // value of -1 here means there is no skill/attribute
+            signed char mSkill, mAttribute;
+
+            // value of -1 here means the value is unavailable
+            int mMagnMin, mMagnMax, mRange, mDuration;
+
+            bool operator==(const SpellEffectParams& other) const
+            {
+                return (other.mEffectID == mEffectID
+                        && other.mSkill == mSkill
+                        && other.mAttribute == mAttribute);
+            }
+        };
+
+        typedef std::vector<SpellEffectParams> SpellEffectList;
 
         class MYGUI_EXPORT MWSkill : public Widget
         {
@@ -38,26 +80,21 @@ namespace MWGui
             const SkillValue& getSkillValue() const { return value; }
 
             // Events
-            typedef delegates::CDelegate1<MWSkill*> EventHandle_SkillVoid;
+            typedef delegates::CMultiDelegate1<MWSkill*> EventHandle_SkillVoid;
 
             /** Event : Skill clicked.\n
                 signature : void method(MWSkill* _sender)\n
             */
             EventHandle_SkillVoid eventClicked;
 
-        /*internal:*/
-            virtual void _initialise(WidgetStyle _style, const IntCoord& _coord, Align _align, ResourceSkin* _info, Widget* _parent, ICroppedRectangle * _croppedParent, IWidgetCreator * _creator, const std::string& _name);
-
         protected:
             virtual ~MWSkill();
 
-            void baseChangeWidgetSkin(ResourceSkin* _info);
+            virtual void initialiseOverride();
 
             void onClicked(MyGUI::Widget* _sender);
 
         private:
-            void initialiseWidgetSkin(ResourceSkin* _info);
-            void shutdownWidgetSkin();
 
             void updateWidgets();
 
@@ -85,26 +122,21 @@ namespace MWGui
             const AttributeValue& getAttributeValue() const { return value; }
 
             // Events
-            typedef delegates::CDelegate1<MWAttribute*> EventHandle_AttributeVoid;
+            typedef delegates::CMultiDelegate1<MWAttribute*> EventHandle_AttributeVoid;
 
             /** Event : Attribute clicked.\n
                 signature : void method(MWAttribute* _sender)\n
             */
             EventHandle_AttributeVoid eventClicked;
 
-        /*internal:*/
-            virtual void _initialise(WidgetStyle _style, const IntCoord& _coord, Align _align, ResourceSkin* _info, Widget* _parent, ICroppedRectangle * _croppedParent, IWidgetCreator * _creator, const std::string& _name);
-
         protected:
             virtual ~MWAttribute();
 
-            void baseChangeWidgetSkin(ResourceSkin* _info);
+            virtual void initialiseOverride();
 
             void onClicked(MyGUI::Widget* _sender);
 
         private:
-            void initialiseWidgetSkin(ResourceSkin* _info);
-            void shutdownWidgetSkin();
 
             void updateWidgets();
 
@@ -115,6 +147,9 @@ namespace MWGui
         };
         typedef MWAttribute* MWAttributePtr;
 
+        /**
+         * @todo remove this class and use MWEffectList instead
+         */
         class MWSpellEffect;
         class MYGUI_EXPORT MWSpell : public Widget
         {
@@ -126,29 +161,72 @@ namespace MWGui
 
             void setWindowManager(WindowManager* parWindowManager) { mWindowManager = parWindowManager; }
             void setSpellId(const std::string &id);
-            void createEffectWidgets(std::vector<MyGUI::WidgetPtr> &effects, MyGUI::WidgetPtr creator, MyGUI::IntCoord &coord);
+
+            /**
+             * @param vector to store the created effect widgets
+             * @param parent widget
+             * @param coordinates to use, will be expanded if more space is needed
+             * @param spell category, if this is 0, this means the spell effects are permanent and won't display e.g. duration
+             * @param various flags, see MWEffectList::EffectFlags
+             */
+            void createEffectWidgets(std::vector<MyGUI::WidgetPtr> &effects, MyGUI::WidgetPtr creator, MyGUI::IntCoord &coord, int flags);
 
             const std::string &getSpellId() const { return id; }
-
-        /*internal:*/
-            virtual void _initialise(WidgetStyle _style, const IntCoord& _coord, Align _align, ResourceSkin* _info, Widget* _parent, ICroppedRectangle * _croppedParent, IWidgetCreator * _creator, const std::string& _name);
 
         protected:
             virtual ~MWSpell();
 
-            void baseChangeWidgetSkin(ResourceSkin* _info);
+            virtual void initialiseOverride();
 
         private:
-            void initialiseWidgetSkin(ResourceSkin* _info);
-            void shutdownWidgetSkin();
-
             void updateWidgets();
 
             WindowManager* mWindowManager;
             std::string id;
-            MyGUI::StaticTextPtr spellNameWidget;
+            MyGUI::TextBox* spellNameWidget;
         };
         typedef MWSpell* MWSpellPtr;
+
+        class MYGUI_EXPORT MWEffectList : public Widget
+        {
+            MYGUI_RTTI_DERIVED( MWEffectList );
+        public:
+            MWEffectList();
+
+            typedef MWMechanics::Stat<int> EnchantmentValue;
+
+            enum EffectFlags
+            {
+                EF_NoTarget = 0x01, // potions have no target (target is always the player)
+                EF_Constant = 0x02 // constant effect means that duration will not be displayed
+            };
+
+            void setWindowManager(WindowManager* parWindowManager) { mWindowManager = parWindowManager; }
+            void setEffectList(const SpellEffectList& list);
+
+            static SpellEffectList effectListFromESM(const ESM::EffectList* effects);
+
+            /**
+             * @param vector to store the created effect widgets
+             * @param parent widget
+             * @param coordinates to use, will be expanded if more space is needed
+             * @param center the effect widgets horizontally
+             * @param various flags, see MWEffectList::EffectFlags
+             */
+            void createEffectWidgets(std::vector<MyGUI::WidgetPtr> &effects, MyGUI::WidgetPtr creator, MyGUI::IntCoord &coord, bool center, int flags);
+
+        protected:
+            virtual ~MWEffectList();
+
+            virtual void initialiseOverride();
+
+        private:
+            void updateWidgets();
+
+            WindowManager* mWindowManager;
+            SpellEffectList mEffectList;
+        };
+        typedef MWEffectList* MWEffectListPtr;
 
         class MYGUI_EXPORT MWSpellEffect : public Widget
         {
@@ -159,28 +237,30 @@ namespace MWGui
             typedef ESM::ENAMstruct SpellEffectValue;
 
             void setWindowManager(WindowManager* parWindowManager) { mWindowManager = parWindowManager; }
-            void setSpellEffect(SpellEffectValue value);
+            void setSpellEffect(const SpellEffectParams& params);
 
-            const SpellEffectValue &getSpellEffect() const { return effect; }
+            std::string effectIDToString(const short effectID);
+            bool effectHasMagnitude (const std::string& effect);
+            bool effectHasDuration (const std::string& effect);
+            bool effectInvolvesAttribute (const std::string& effect);
+            bool effectInvolvesSkill (const std::string& effect);
 
-        /*internal:*/
-            virtual void _initialise(WidgetStyle _style, const IntCoord& _coord, Align _align, ResourceSkin* _info, Widget* _parent, ICroppedRectangle * _croppedParent, IWidgetCreator * _creator, const std::string& _name);
+            int getRequestedWidth() const { return mRequestedWidth; }
 
         protected:
             virtual ~MWSpellEffect();
 
-            void baseChangeWidgetSkin(ResourceSkin* _info);
-
+            virtual void initialiseOverride();
+            
         private:
-            void initialiseWidgetSkin(ResourceSkin* _info);
-            void shutdownWidgetSkin();
 
             void updateWidgets();
 
             WindowManager* mWindowManager;
-            SpellEffectValue effect;
-            MyGUI::StaticImagePtr imageWidget;
-            MyGUI::StaticTextPtr textWidget;
+            SpellEffectParams mEffectParams;
+            MyGUI::ImageBox* imageWidget;
+            MyGUI::TextBox* textWidget;
+            int mRequestedWidth;
         };
         typedef MWSpellEffect* MWSpellEffectPtr;
 
@@ -196,25 +276,19 @@ namespace MWGui
             int getValue() const { return value; }
             int getMax() const { return max; }
 
-            /*internal:*/
-            virtual void _initialise(WidgetStyle _style, const IntCoord& _coord, Align _align, ResourceSkin* _info, Widget* _parent, ICroppedRectangle * _croppedParent, IWidgetCreator * _creator, const std::string& _name);
-
         protected:
             virtual ~MWDynamicStat();
 
-            void baseChangeWidgetSkin(ResourceSkin* _info);
+            virtual void initialiseOverride();
 
         private:
-            void initialiseWidgetSkin(ResourceSkin* _info);
-            void shutdownWidgetSkin();
 
             int value, max;
-            MyGUI::StaticTextPtr textWidget;
+            MyGUI::TextBox* textWidget;
             MyGUI::ProgressPtr barWidget;
-            MyGUI::StaticTextPtr barTextWidget;
+            MyGUI::TextBox* barTextWidget;
         };
         typedef MWDynamicStat* MWDynamicStatPtr;
-
     }
 }
 

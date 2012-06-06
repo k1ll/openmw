@@ -5,9 +5,44 @@
 #include <typeinfo>
 #include <stdexcept>
 
+#include <boost/algorithm/string.hpp>    
+
 #include <components/esm/loadcont.hpp>
 
+#include "../mwbase/environment.hpp"
+#include "../mwworld/world.hpp"
+
 #include "manualref.hpp"
+#include "refdata.hpp"
+#include "class.hpp"
+
+namespace
+{
+    template<typename T>
+    float getTotalWeight (const ESMS::CellRefList<T, MWWorld::RefData>& cellRefList)
+    {
+        float sum = 0;
+
+        for (typename ESMS::CellRefList<T, MWWorld::RefData>::List::const_iterator iter (
+            cellRefList.list.begin());
+            iter!=cellRefList.list.end();
+            ++iter)
+        {
+            if (iter->mData.getCount()>0)
+                sum += iter->mData.getCount()*iter->base->data.weight;
+        }
+
+        return sum;
+    }
+
+    bool compare_string_ci(std::string str1, std::string str2)
+    {
+        boost::algorithm::to_lower(str1);
+        return str1 == str2;
+    }
+}
+
+MWWorld::ContainerStore::ContainerStore() : mStateId (0), mCachedWeight (0), mWeightUpToDate (false) {}
 
 MWWorld::ContainerStore::~ContainerStore() {}
 
@@ -21,25 +56,94 @@ MWWorld::ContainerStoreIterator MWWorld::ContainerStore::end()
     return ContainerStoreIterator (this);
 }
 
-void MWWorld::ContainerStore::add (const Ptr& ptr)
+bool MWWorld::ContainerStore::stacks(const Ptr& ptr1, const Ptr& ptr2)
 {
-    /// \todo implement item stacking
+    /// \todo add current weapon/armor health, remaining lockpick/repair uses, current enchantment charge here as soon as they are implemented
+    if (  ptr1.mCellRef->refID == ptr2.mCellRef->refID
+        && MWWorld::Class::get(ptr1).getScript(ptr1) == "" // item with a script never stacks
+        && MWWorld::Class::get(ptr1).getEnchantment(ptr1) == "" // item with enchantment never stacks (we could revisit this later, but for now it makes selecting items in the spell window much easier)
+        && ptr1.mCellRef->owner == ptr2.mCellRef->owner
+        && ptr1.mCellRef->soul == ptr2.mCellRef->soul
+        && ptr1.mCellRef->charge == ptr2.mCellRef->charge)
+        return true;
 
-    switch (getType (ptr))
+    return false;
+}
+
+MWWorld::ContainerStoreIterator MWWorld::ContainerStore::add (const Ptr& ptr)
+{
+    int type = getType(ptr);
+
+    // gold needs special handling: when it is inserted into a container, the base object automatically becomes Gold_001
+    // this ensures that gold piles of different sizes stack with each other (also, several scripts rely on Gold_001 for detecting player gold)
+    if (MWWorld::Class::get(ptr).getName(ptr) == MWBase::Environment::get().getWorld()->getStore().gameSettings.search("sGold")->str)
     {
-        case Type_Potion: potions.list.push_back (*ptr.get<ESM::Potion>());  break;
-        case Type_Apparatus: appas.list.push_back (*ptr.get<ESM::Apparatus>());  break;
-        case Type_Armor: armors.list.push_back (*ptr.get<ESM::Armor>());  break;
-        case Type_Book: books.list.push_back (*ptr.get<ESM::Book>());  break;
-        case Type_Clothing: clothes.list.push_back (*ptr.get<ESM::Clothing>());  break;
-        case Type_Ingredient: ingreds.list.push_back (*ptr.get<ESM::Ingredient>());  break;
-        case Type_Light: lights.list.push_back (*ptr.get<ESM::Light>());  break;
-        case Type_Lockpick: lockpicks.list.push_back (*ptr.get<ESM::Tool>());  break;
-        case Type_Miscellaneous: miscItems.list.push_back (*ptr.get<ESM::Miscellaneous>());  break;
-        case Type_Probe: probes.list.push_back (*ptr.get<ESM::Probe>());  break;
-        case Type_Repair: repairs.list.push_back (*ptr.get<ESM::Repair>());  break;
-        case Type_Weapon: weapons.list.push_back (*ptr.get<ESM::Weapon>());  break;
+        ESMS::LiveCellRef<ESM::Miscellaneous, MWWorld::RefData> *gold =
+            ptr.get<ESM::Miscellaneous>();
+
+        if (compare_string_ci(gold->ref.refID, "gold_001")
+            || compare_string_ci(gold->ref.refID, "gold_005")
+            || compare_string_ci(gold->ref.refID, "gold_010")
+            || compare_string_ci(gold->ref.refID, "gold_025")
+            || compare_string_ci(gold->ref.refID, "gold_100"))
+        {
+            MWWorld::ManualRef ref(MWBase::Environment::get().getWorld()->getStore(), "Gold_001");
+
+            int count = (ptr.getRefData().getCount() == 1) ? gold->base->data.value : ptr.getRefData().getCount();
+            ref.getPtr().getRefData().setCount(count);
+            for (MWWorld::ContainerStoreIterator iter (begin(type)); iter!=end(); ++iter)
+            {
+                if (compare_string_ci((*iter).get<ESM::Miscellaneous>()->ref.refID, "gold_001"))
+                {
+                    (*iter).getRefData().setCount( (*iter).getRefData().getCount() + count);
+                    flagAsModified();
+                    return iter;
+                }
+            }
+
+            return addImpl(ref.getPtr());
+        }
     }
+
+    // determine whether to stack or not
+    for (MWWorld::ContainerStoreIterator iter (begin(type)); iter!=end(); ++iter)
+    {
+        if (stacks(*iter, ptr))
+        {
+            // stack
+            iter->getRefData().setCount( iter->getRefData().getCount() + ptr.getRefData().getCount() );
+
+            flagAsModified();
+            return iter;
+        }
+    }
+
+    // if we got here, this means no stacking
+    return addImpl(ptr);
+}
+
+MWWorld::ContainerStoreIterator MWWorld::ContainerStore::addImpl (const Ptr& ptr)
+{
+    ContainerStoreIterator it = begin();
+
+    switch (getType(ptr))
+    {
+        case Type_Potion: potions.list.push_back (*ptr.get<ESM::Potion>()); it = ContainerStoreIterator(this, --potions.list.end()); break;
+        case Type_Apparatus: appas.list.push_back (*ptr.get<ESM::Apparatus>()); it = ContainerStoreIterator(this, --appas.list.end()); break;
+        case Type_Armor: armors.list.push_back (*ptr.get<ESM::Armor>()); it = ContainerStoreIterator(this, --armors.list.end()); break;
+        case Type_Book: books.list.push_back (*ptr.get<ESM::Book>()); it = ContainerStoreIterator(this, --books.list.end()); break;
+        case Type_Clothing: clothes.list.push_back (*ptr.get<ESM::Clothing>()); it = ContainerStoreIterator(this, --clothes.list.end()); break;
+        case Type_Ingredient: ingreds.list.push_back (*ptr.get<ESM::Ingredient>()); it = ContainerStoreIterator(this, --ingreds.list.end()); break;
+        case Type_Light: lights.list.push_back (*ptr.get<ESM::Light>()); it = ContainerStoreIterator(this, --lights.list.end()); break;
+        case Type_Lockpick: lockpicks.list.push_back (*ptr.get<ESM::Tool>()); it = ContainerStoreIterator(this, --lockpicks.list.end()); break;
+        case Type_Miscellaneous: miscItems.list.push_back (*ptr.get<ESM::Miscellaneous>()); it = ContainerStoreIterator(this, --miscItems.list.end()); break;
+        case Type_Probe: probes.list.push_back (*ptr.get<ESM::Probe>()); it = ContainerStoreIterator(this, --probes.list.end()); break;
+        case Type_Repair: repairs.list.push_back (*ptr.get<ESM::Repair>()); it = ContainerStoreIterator(this, --repairs.list.end()); break;
+        case Type_Weapon: weapons.list.push_back (*ptr.get<ESM::Weapon>()); it = ContainerStoreIterator(this, --weapons.list.end()); break;
+    }
+
+    flagAsModified();
+    return it;
 }
 
 void MWWorld::ContainerStore::fill (const ESM::InventoryList& items, const ESMS::ESMStore& store)
@@ -55,9 +159,11 @@ void MWWorld::ContainerStore::fill (const ESM::InventoryList& items, const ESMS:
             continue;
         }
 
-        ref.getPtr().getRefData().setCount (iter->count);
+        ref.getPtr().getRefData().setCount (std::abs(iter->count)); /// \todo implement item restocking (indicated by negative count)
         add (ref.getPtr());
     }
+
+    flagAsModified();
 }
 
 void MWWorld::ContainerStore::clear()
@@ -74,6 +180,44 @@ void MWWorld::ContainerStore::clear()
     probes.list.clear();
     repairs.list.clear();
     weapons.list.clear();
+
+    flagAsModified();
+}
+
+void MWWorld::ContainerStore::flagAsModified()
+{
+    ++mStateId;
+    mWeightUpToDate = false;
+}
+
+int MWWorld::ContainerStore::getStateId() const
+{
+    return mStateId;
+}
+
+float MWWorld::ContainerStore::getWeight() const
+{
+    if (!mWeightUpToDate)
+    {
+        mCachedWeight = 0;
+
+        mCachedWeight += getTotalWeight (potions);
+        mCachedWeight += getTotalWeight (appas);
+        mCachedWeight += getTotalWeight (armors);
+        mCachedWeight += getTotalWeight (books);
+        mCachedWeight += getTotalWeight (clothes);
+        mCachedWeight += getTotalWeight (ingreds);
+        mCachedWeight += getTotalWeight (lights);
+        mCachedWeight += getTotalWeight (lockpicks);
+        mCachedWeight += getTotalWeight (miscItems);
+        mCachedWeight += getTotalWeight (probes);
+        mCachedWeight += getTotalWeight (repairs);
+        mCachedWeight += getTotalWeight (weapons);
+
+        mWeightUpToDate = true;
+    }
+
+    return mCachedWeight;
 }
 
 int MWWorld::ContainerStore::getType (const Ptr& ptr)
@@ -130,7 +274,37 @@ MWWorld::ContainerStoreIterator::ContainerStoreIterator (int mask, ContainerStor
 : mType (0), mMask (mask), mContainer (container)
 {
     nextType();
+
+    if (mType==-1 || (**this).getRefData().getCount())
+        return;
+
+    ++*this;
 }
+
+MWWorld::ContainerStoreIterator::ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Potion, RefData>::List::iterator iterator)
+    : mType(MWWorld::ContainerStore::Type_Potion), mMask(MWWorld::ContainerStore::Type_All), mContainer(container), mPotion(iterator){}
+MWWorld::ContainerStoreIterator::ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Apparatus, RefData>::List::iterator iterator)
+    : mType(MWWorld::ContainerStore::Type_Apparatus), mMask(MWWorld::ContainerStore::Type_All), mContainer(container), mApparatus(iterator){}
+MWWorld::ContainerStoreIterator::ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Armor, RefData>::List::iterator iterator)
+    : mType(MWWorld::ContainerStore::Type_Armor), mMask(MWWorld::ContainerStore::Type_All), mContainer(container), mArmor(iterator){}
+MWWorld::ContainerStoreIterator::ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Book, RefData>::List::iterator iterator)
+    : mType(MWWorld::ContainerStore::Type_Book), mMask(MWWorld::ContainerStore::Type_All), mContainer(container), mBook(iterator){}
+MWWorld::ContainerStoreIterator::ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Clothing, RefData>::List::iterator iterator)
+    : mType(MWWorld::ContainerStore::Type_Clothing), mMask(MWWorld::ContainerStore::Type_All), mContainer(container), mClothing(iterator){}
+MWWorld::ContainerStoreIterator::ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Ingredient, RefData>::List::iterator iterator)
+    : mType(MWWorld::ContainerStore::Type_Ingredient), mMask(MWWorld::ContainerStore::Type_All), mContainer(container), mIngredient(iterator){}
+MWWorld::ContainerStoreIterator::ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Light, RefData>::List::iterator iterator)
+    : mType(MWWorld::ContainerStore::Type_Light), mMask(MWWorld::ContainerStore::Type_All), mContainer(container), mLight(iterator){}
+MWWorld::ContainerStoreIterator::ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Tool, RefData>::List::iterator iterator)
+    : mType(MWWorld::ContainerStore::Type_Lockpick), mMask(MWWorld::ContainerStore::Type_All), mContainer(container), mLockpick(iterator){}
+MWWorld::ContainerStoreIterator::ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Miscellaneous, RefData>::List::iterator iterator)
+    : mType(MWWorld::ContainerStore::Type_Miscellaneous), mMask(MWWorld::ContainerStore::Type_All), mContainer(container), mMiscellaneous(iterator){}
+MWWorld::ContainerStoreIterator::ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Probe, RefData>::List::iterator iterator)
+    : mType(MWWorld::ContainerStore::Type_Probe), mMask(MWWorld::ContainerStore::Type_All), mContainer(container), mProbe(iterator){}
+MWWorld::ContainerStoreIterator::ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Repair, RefData>::List::iterator iterator)
+    : mType(MWWorld::ContainerStore::Type_Repair), mMask(MWWorld::ContainerStore::Type_All), mContainer(container), mRepair(iterator){}
+MWWorld::ContainerStoreIterator::ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Weapon, RefData>::List::iterator iterator)
+    : mType(MWWorld::ContainerStore::Type_Weapon), mMask(MWWorld::ContainerStore::Type_All), mContainer(container), mWeapon(iterator){}
 
 void MWWorld::ContainerStoreIterator::incType()
 {
@@ -151,7 +325,7 @@ void MWWorld::ContainerStoreIterator::nextType()
     {
         incType();
 
-        if (mType & mMask)
+        if ((mType & mMask) && mType>0)
             if (resetIterator())
                 break;
     }
@@ -301,23 +475,30 @@ MWWorld::Ptr *MWWorld::ContainerStoreIterator::operator->() const
 
 MWWorld::Ptr MWWorld::ContainerStoreIterator::operator*() const
 {
+    Ptr ptr;
+
     switch (mType)
     {
-        case ContainerStore::Type_Potion: return MWWorld::Ptr (&*mPotion, 0);
-        case ContainerStore::Type_Apparatus: return MWWorld::Ptr (&*mApparatus, 0);
-        case ContainerStore::Type_Armor: return MWWorld::Ptr (&*mArmor, 0);
-        case ContainerStore::Type_Book: return MWWorld::Ptr (&*mBook, 0);
-        case ContainerStore::Type_Clothing: return MWWorld::Ptr (&*mClothing, 0);
-        case ContainerStore::Type_Ingredient: return MWWorld::Ptr (&*mIngredient, 0);
-        case ContainerStore::Type_Light: return MWWorld::Ptr (&*mLight, 0);
-        case ContainerStore::Type_Lockpick: return MWWorld::Ptr (&*mLockpick, 0);
-        case ContainerStore::Type_Miscellaneous: return MWWorld::Ptr (&*mMiscellaneous, 0);
-        case ContainerStore::Type_Probe: return MWWorld::Ptr (&*mProbe, 0);
-        case ContainerStore::Type_Repair: return MWWorld::Ptr (&*mRepair, 0);
-        case ContainerStore::Type_Weapon: return MWWorld::Ptr (&*mWeapon, 0);
+        case ContainerStore::Type_Potion: ptr = MWWorld::Ptr (&*mPotion, 0); break;
+        case ContainerStore::Type_Apparatus: ptr = MWWorld::Ptr (&*mApparatus, 0); break;
+        case ContainerStore::Type_Armor: ptr = MWWorld::Ptr (&*mArmor, 0); break;
+        case ContainerStore::Type_Book: ptr = MWWorld::Ptr (&*mBook, 0); break;
+        case ContainerStore::Type_Clothing: ptr = MWWorld::Ptr (&*mClothing, 0); break;
+        case ContainerStore::Type_Ingredient: ptr = MWWorld::Ptr (&*mIngredient, 0); break;
+        case ContainerStore::Type_Light: ptr = MWWorld::Ptr (&*mLight, 0); break;
+        case ContainerStore::Type_Lockpick: ptr = MWWorld::Ptr (&*mLockpick, 0); break;
+        case ContainerStore::Type_Miscellaneous: ptr = MWWorld::Ptr (&*mMiscellaneous, 0); break;
+        case ContainerStore::Type_Probe: ptr = MWWorld::Ptr (&*mProbe, 0); break;
+        case ContainerStore::Type_Repair: ptr = MWWorld::Ptr (&*mRepair, 0); break;
+        case ContainerStore::Type_Weapon: ptr = MWWorld::Ptr (&*mWeapon, 0); break;
     }
 
-    throw std::runtime_error ("invalid pointer");
+    if (ptr.isEmpty())
+        throw std::runtime_error ("invalid iterator");
+
+    ptr.setContainerStore (mContainer);
+
+    return ptr;
 }
 
 MWWorld::ContainerStoreIterator& MWWorld::ContainerStoreIterator::operator++()

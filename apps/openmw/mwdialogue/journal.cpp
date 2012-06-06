@@ -1,7 +1,12 @@
 
 #include "journal.hpp"
 
-#include "../mwworld/environment.hpp"
+#include "../mwbase/environment.hpp"
+
+#include "../mwgui/window_manager.hpp"
+#include "../mwgui/messagebox.hpp"
+
+#include "../mwworld/world.hpp"
 
 namespace MWDialogue
 {
@@ -20,27 +25,30 @@ namespace MWDialogue
         return iter->second;
     }
 
-    Journal::Journal (MWWorld::Environment& environment)
-    : mEnvironment (environment)
+    Journal::Journal()
     {}
 
     void Journal::addEntry (const std::string& id, int index)
     {
         StampedJournalEntry entry =
-            StampedJournalEntry::makeFromQuest (id, index, *mEnvironment.mWorld);
+            StampedJournalEntry::makeFromQuest (id, index, *MWBase::Environment::get().getWorld());
 
         mJournal.push_back (entry);
 
         Quest& quest = getQuest (id);
 
-        quest.addEntry (entry, *mEnvironment.mWorld); // we are doing slicing on purpose here
+        quest.addEntry (entry, *MWBase::Environment::get().getWorld()); // we are doing slicing on purpose here
+
+        std::vector<std::string> empty;
+        std::string notification = MWBase::Environment::get().getWorld()->getStore().gameSettings.search("sJournalEntry")->str;
+        MWBase::Environment::get().getWindowManager()->messageBox (notification, empty);
     }
 
     void Journal::setJournalIndex (const std::string& id, int index)
     {
         Quest& quest = getQuest (id);
 
-        quest.setIndex (index, *mEnvironment.mWorld);
+        quest.setIndex (index, *MWBase::Environment::get().getWorld());
     }
 
     void Journal::addTopic (const std::string& topicId, const std::string& infoId)
@@ -55,12 +63,17 @@ namespace MWDialogue
             iter = result.first;
         }
 
-        iter->second.addEntry (JournalEntry (topicId, infoId), *mEnvironment.mWorld);
+        iter->second.addEntry (JournalEntry (topicId, infoId), *MWBase::Environment::get().getWorld());
     }
 
     int Journal::getJournalIndex (const std::string& id) const
     {
-        return 0;
+        TQuestContainer::const_iterator iter = mQuests.find (id);
+
+        if (iter==mQuests.end())
+            return 0;
+
+        return iter->second.getIndex();
     }
 
     Journal::TEntryIter Journal::begin() const

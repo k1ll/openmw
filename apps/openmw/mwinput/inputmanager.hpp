@@ -3,6 +3,8 @@
 
 #include "../mwgui/mode.hpp"
 
+#include <components/settings/settings.hpp>
+
 namespace OEngine
 {
   namespace Render
@@ -48,7 +50,13 @@ namespace MWInput
                    OMW::Engine& engine);
     ~MWInputManager();
 
-    void setGuiMode(MWGui::GuiMode mode);
+    void update();
+
+    void changeInputMode(bool guiMode);
+
+    void processChangedSettings(const Settings::CategorySettingVector& changed);
+
+    void setDragDrop(bool dragDrop);
   };
 }
 #endif

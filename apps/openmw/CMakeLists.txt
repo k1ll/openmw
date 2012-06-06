@@ -14,7 +14,9 @@ set(GAME_HEADER
 source_group(game FILES ${GAME} ${GAME_HEADER})
 
 add_openmw_dir (mwrender
-    renderingmanager debugging sky player animation npcanimation creatureanimation actors objects renderinginterface
+    renderingmanager debugging sky player animation npcanimation creatureanimation actors objects
+    renderinginterface localmap occlusionquery terrain terrainmaterial water shadows shaderhelper
+    compositors
     )
 
 add_openmw_dir (mwinput
@@ -22,8 +24,11 @@ add_openmw_dir (mwinput
     )
 
 add_openmw_dir (mwgui
-    layouts text_input widgets race class birth review window_manager console dialogue
+    text_input widgets race class birth review window_manager console dialogue
     dialogue_history window_base stats_window messagebox journalwindow charactercreation
+    map_window window_pinnable_base cursorreplace tooltips scrollwindow bookwindow list
+    formatting inventorywindow container hud countdialog tradewindow settingswindow
+    confirmationdialog alchemywindow referenceinterface spellwindow
     )
 
 add_openmw_dir (mwdialogue
@@ -38,13 +43,14 @@ add_openmw_dir (mwscript
     )
 
 add_openmw_dir (mwsound
-    soundmanager
+    soundmanager openal_output audiere_decoder mpgsnd_decoder ffmpeg_decoder
     )
 
 add_openmw_dir (mwworld
-    refdata world physicssystem scene environment globals class action nullaction actionteleport
+    refdata world physicssystem scene globals class action nullaction actionteleport
     containerstore actiontalk actiontake manualref player cellfunctors
-    cells localscripts customdata weather inventorystore
+    cells localscripts customdata weather inventorystore ptr actionopen actionread
+    actionequip timestamp actionalchemy
     )
 
 add_openmw_dir (mwclass
@@ -53,10 +59,24 @@ add_openmw_dir (mwclass
     )
 
 add_openmw_dir (mwmechanics
-    mechanicsmanager stat creaturestats magiceffects movement
+    mechanicsmanager stat creaturestats magiceffects movement actors drawstate spells
+    activespells
+    )
+
+add_openmw_dir (mwbase
+    environment
     )
 
 # Main executable
+IF(OGRE_STATIC)
+IF(WIN32)
+ADD_DEFINITIONS(-DENABLE_PLUGIN_CgProgramManager -DENABLE_PLUGIN_OctreeSceneManager -DENABLE_PLUGIN_ParticleFX -DENABLE_PLUGIN_-DENABLE_PLUGIN_Direct3D9 -DENABLE_PLUGIN_GL)
+set(OGRE_STATIC_PLUGINS ${OGRE_Plugin_CgProgramManager_LIBRARIES} ${OGRE_Plugin_OctreeSceneManager_LIBRARIES} ${OGRE_Plugin_ParticleFX_LIBRARIES} ${OGRE_RenderSystem_Direct3D9_LIBRARIES} ${OGRE_RenderSystem_GL_LIBRARIES})
+ELSE(WIN32)
+ADD_DEFINITIONS(-DENABLE_PLUGIN_CgProgramManager -DENABLE_PLUGIN_OctreeSceneManager -DENABLE_PLUGIN_ParticleFX -DENABLE_PLUGIN_GL)
+set(OGRE_STATIC_PLUGINS ${OGRE_Plugin_CgProgramManager_LIBRARIES} ${Cg_LIBRARIES} ${OGRE_Plugin_OctreeSceneManager_LIBRARIES} ${OGRE_Plugin_ParticleFX_LIBRARIES} ${OGRE_RenderSystem_GL_LIBRARIES})
+ENDIF(WIN32)
+ENDIF(OGRE_STATIC)
 add_executable(openmw
     ${OPENMW_LIBS} ${OPENMW_LIBS_HEADER}
     ${COMPONENT_FILES}
@@ -72,15 +92,22 @@ add_definitions(${SOUND_DEFINE})
 
 target_link_libraries(openmw
     ${OGRE_LIBRARIES}
+    ${OGRE_Terrain_LIBRARY}
+    ${OGRE_STATIC_PLUGINS}
     ${OIS_LIBRARIES}
     ${Boost_LIBRARIES}
     ${OPENAL_LIBRARY}
     ${SOUND_INPUT_LIBRARY}
     ${BULLET_LIBRARIES}
+    ${MYGUI_LIBRARIES}
+    ${MYGUI_PLATFORM_LIBRARIES}
     components
-    MyGUIEngine
-    MyGUIOgrePlatform
 )
+
+# Fix for not visible pthreads functions for linker with glibc 2.15
+if (UNIX AND NOT APPLE)
+target_link_libraries(openmw ${CMAKE_THREAD_LIBS_INIT})
+endif()
 
 if(APPLE)
     find_library(CARBON_FRAMEWORK Carbon)

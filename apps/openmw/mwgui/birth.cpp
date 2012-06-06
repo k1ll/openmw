@@ -21,18 +21,18 @@ BirthDialog::BirthDialog(WindowManager& parWindowManager)
 
     getWidget(birthList, "BirthsignList");
     birthList->setScrollVisible(true);
-    birthList->eventListSelectAccept = MyGUI::newDelegate(this, &BirthDialog::onSelectBirth);
-    birthList->eventListMouseItemActivate = MyGUI::newDelegate(this, &BirthDialog::onSelectBirth);
-    birthList->eventListChangePosition = MyGUI::newDelegate(this, &BirthDialog::onSelectBirth);
+    birthList->eventListSelectAccept += MyGUI::newDelegate(this, &BirthDialog::onSelectBirth);
+    birthList->eventListMouseItemActivate += MyGUI::newDelegate(this, &BirthDialog::onSelectBirth);
+    birthList->eventListChangePosition += MyGUI::newDelegate(this, &BirthDialog::onSelectBirth);
 
-    // TODO: These buttons should be managed by a Dialog class
     MyGUI::ButtonPtr backButton;
     getWidget(backButton, "BackButton");
-    backButton->eventMouseButtonClick = MyGUI::newDelegate(this, &BirthDialog::onBackClicked);
+    backButton->eventMouseButtonClick += MyGUI::newDelegate(this, &BirthDialog::onBackClicked);
 
     MyGUI::ButtonPtr okButton;
     getWidget(okButton, "OKButton");
-    okButton->eventMouseButtonClick = MyGUI::newDelegate(this, &BirthDialog::onOkClicked);
+    okButton->setCaption(mWindowManager.getGameSettingString("sOK", ""));
+    okButton->eventMouseButtonClick += MyGUI::newDelegate(this, &BirthDialog::onOkClicked);
 
     updateBirths();
     updateSpells();
@@ -46,21 +46,16 @@ void BirthDialog::setNextButtonShow(bool shown)
     MyGUI::ButtonPtr okButton;
     getWidget(okButton, "OKButton");
 
-    // TODO: All hardcoded coords for buttons are temporary, will be replaced with a dynamic system.
     if (shown)
-    {
-        okButton->setCaption("Next");
-
-        // Adjust back button when next is shown
-        backButton->setCoord(MyGUI::IntCoord(375 - 18, 340, 53, 23));
-        okButton->setCoord(MyGUI::IntCoord(431 - 18, 340, 42 + 18, 23));
-    }
+        okButton->setCaption(mWindowManager.getGameSettingString("sNext", ""));
     else
-    {
-        okButton->setCaption("OK");
-        backButton->setCoord(MyGUI::IntCoord(375, 340, 53, 23));
-        okButton->setCoord(MyGUI::IntCoord(431, 340, 42, 23));
-    }
+        okButton->setCaption(mWindowManager.getGameSettingString("sOK", ""));
+
+    int okButtonWidth = okButton->getTextSize().width + 24;
+    int backButtonWidth = backButton->getTextSize().width + 24;
+
+    okButton->setCoord(473 - okButtonWidth, 340, okButtonWidth, 23);
+    backButton->setCoord(473 - okButtonWidth - backButtonWidth - 6, 340, backButtonWidth, 23);
 }
 
 void BirthDialog::open()
@@ -100,7 +95,7 @@ void BirthDialog::onBackClicked(MyGUI::Widget* _sender)
     eventBack();
 }
 
-void BirthDialog::onSelectBirth(MyGUI::List* _sender, size_t _index)
+void BirthDialog::onSelectBirth(MyGUI::ListBox* _sender, size_t _index)
 {
     if (_index == MyGUI::ITEM_NONE)
         return;
@@ -188,7 +183,7 @@ void BirthDialog::updateSpells()
     {
         if (!categories[category].spells.empty())
         {
-            MyGUI::StaticTextPtr label = spellArea->createWidget<MyGUI::StaticText>("SandBrightText", coord, MyGUI::Align::Default, std::string("Label"));
+            MyGUI::TextBox* label = spellArea->createWidget<MyGUI::TextBox>("SandBrightText", coord, MyGUI::Align::Default, std::string("Label"));
             label->setCaption(mWindowManager.getGameSettingString(categories[category].label, ""));
             spellItems.push_back(label);
             coord.top += lineHeight;
@@ -206,7 +201,7 @@ void BirthDialog::updateSpells()
 
                 MyGUI::IntCoord spellCoord = coord;
                 spellCoord.height = 24; // TODO: This should be fetched from the skin somehow, or perhaps a widget in the layout as a template?
-                spellWidget->createEffectWidgets(spellItems, spellArea, spellCoord);
+                spellWidget->createEffectWidgets(spellItems, spellArea, spellCoord, (category == 0) ? MWEffectList::EF_Constant : 0);
                 coord.top = spellCoord.top;
 
                 ++i;

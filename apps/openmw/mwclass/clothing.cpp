@@ -5,11 +5,20 @@
 
 #include <components/esm_store/cell_store.hpp>
 
+#include "../mwbase/environment.hpp"
+
 #include "../mwworld/ptr.hpp"
 #include "../mwworld/actiontake.hpp"
+#include "../mwworld/actionequip.hpp"
 #include "../mwworld/inventorystore.hpp"
+#include "../mwworld/world.hpp"
+
+#include "../mwgui/tooltips.hpp"
+#include "../mwgui/window_manager.hpp"
 
 #include "../mwrender/objects.hpp"
+
+#include "../mwsound/soundmanager.hpp"
 
 namespace MWClass
 {
@@ -29,7 +38,7 @@ namespace MWClass
         }
     }
 
-    void Clothing::insertObject(const MWWorld::Ptr& ptr, MWWorld::PhysicsSystem& physics, MWWorld::Environment& environment) const
+    void Clothing::insertObject(const MWWorld::Ptr& ptr, MWWorld::PhysicsSystem& physics) const
     {
         ESMS::LiveCellRef<ESM::Clothing, MWWorld::RefData> *ref =
             ptr.get<ESM::Clothing>();
@@ -52,8 +61,10 @@ namespace MWClass
     }
 
     boost::shared_ptr<MWWorld::Action> Clothing::activate (const MWWorld::Ptr& ptr,
-        const MWWorld::Ptr& actor, const MWWorld::Environment& environment) const
+        const MWWorld::Ptr& actor) const
     {
+         MWBase::Environment::get().getSoundManager()->playSound3D (ptr, getUpSoundId(ptr), 1.0, 1.0, MWSound::Play_NoTrack);
+
         return boost::shared_ptr<MWWorld::Action> (
             new MWWorld::ActionTake (ptr));
     }
@@ -84,7 +95,7 @@ namespace MWClass
 
             static const int sMapping[size][2] =
             {
-                { ESM::Clothing::Shirt, MWWorld::InventoryStore::Slot_Cuirass },
+                { ESM::Clothing::Shirt, MWWorld::InventoryStore::Slot_Shirt },
                 { ESM::Clothing::Belt, MWWorld::InventoryStore::Slot_Belt },
                 { ESM::Clothing::Robe, MWWorld::InventoryStore::Slot_Robe },
                 { ESM::Clothing::Pants, MWWorld::InventoryStore::Slot_Pants },
@@ -106,8 +117,7 @@ namespace MWClass
         return std::make_pair (slots, false);
     }
 
-    int Clothing::getEuqipmentSkill (const MWWorld::Ptr& ptr,
-        const MWWorld::Environment& environment) const
+    int Clothing::getEquipmentSkill (const MWWorld::Ptr& ptr) const
     {
         ESMS::LiveCellRef<ESM::Clothing, MWWorld::RefData> *ref =
             ptr.get<ESM::Clothing>();
@@ -118,10 +128,101 @@ namespace MWClass
         return -1;
     }
 
+    int Clothing::getValue (const MWWorld::Ptr& ptr) const
+    {
+        ESMS::LiveCellRef<ESM::Clothing, MWWorld::RefData> *ref =
+            ptr.get<ESM::Clothing>();
+
+        return ref->base->data.value;
+    }
+
     void Clothing::registerSelf()
     {
         boost::shared_ptr<Class> instance (new Clothing);
 
         registerClass (typeid (ESM::Clothing).name(), instance);
+    }
+
+    std::string Clothing::getUpSoundId (const MWWorld::Ptr& ptr) const
+    {
+         ESMS::LiveCellRef<ESM::Clothing, MWWorld::RefData> *ref =
+            ptr.get<ESM::Clothing>();
+
+        if (ref->base->data.type == 8)
+        {
+            return std::string("Item Ring Up");
+        }
+        return std::string("Item Clothes Up");
+    }
+
+    std::string Clothing::getDownSoundId (const MWWorld::Ptr& ptr) const
+    {
+         ESMS::LiveCellRef<ESM::Clothing, MWWorld::RefData> *ref =
+            ptr.get<ESM::Clothing>();
+
+        if (ref->base->data.type == 8)
+        {
+            return std::string("Item Ring Down");
+        }
+        return std::string("Item Clothes Down");
+    }
+
+    std::string Clothing::getInventoryIcon (const MWWorld::Ptr& ptr) const
+    {
+          ESMS::LiveCellRef<ESM::Clothing, MWWorld::RefData> *ref =
+            ptr.get<ESM::Clothing>();
+
+        return ref->base->icon;
+    }
+
+    bool Clothing::hasToolTip (const MWWorld::Ptr& ptr) const
+    {
+        ESMS::LiveCellRef<ESM::Clothing, MWWorld::RefData> *ref =
+            ptr.get<ESM::Clothing>();
+
+        return (ref->base->name != "");
+    }
+
+    MWGui::ToolTipInfo Clothing::getToolTipInfo (const MWWorld::Ptr& ptr) const
+    {
+        ESMS::LiveCellRef<ESM::Clothing, MWWorld::RefData> *ref =
+            ptr.get<ESM::Clothing>();
+
+        MWGui::ToolTipInfo info;
+        info.caption = ref->base->name + MWGui::ToolTips::getCountString(ptr.getRefData().getCount());
+        info.icon = ref->base->icon;
+
+        const ESMS::ESMStore& store = MWBase::Environment::get().getWorld()->getStore();
+
+        std::string text;
+
+        text += "\n" + store.gameSettings.search("sWeight")->str + ": " + MWGui::ToolTips::toString(ref->base->data.weight);
+        text += MWGui::ToolTips::getValueString(ref->base->data.value, store.gameSettings.search("sValue")->str);
+
+        if (MWBase::Environment::get().getWindowManager()->getFullHelp()) {
+            text += MWGui::ToolTips::getMiscString(ref->ref.owner, "Owner");
+            text += MWGui::ToolTips::getMiscString(ref->base->script, "Script");
+        }
+
+        info.enchant = ref->base->enchant;
+
+        info.text = text;
+
+        return info;
+    }
+
+    std::string Clothing::getEnchantment (const MWWorld::Ptr& ptr) const
+    {
+        ESMS::LiveCellRef<ESM::Clothing, MWWorld::RefData> *ref =
+            ptr.get<ESM::Clothing>();
+
+        return ref->base->enchant;
+    }
+
+    boost::shared_ptr<MWWorld::Action> Clothing::use (const MWWorld::Ptr& ptr) const
+    {
+        MWBase::Environment::get().getSoundManager()->playSound (getUpSoundId(ptr), 1.0, 1.0);
+
+        return boost::shared_ptr<MWWorld::Action>(new MWWorld::ActionEquip(ptr));
     }
 }

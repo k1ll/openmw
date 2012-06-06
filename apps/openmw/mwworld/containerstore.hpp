@@ -52,8 +52,13 @@ namespace MWWorld
             ESMS::CellRefList<ESM::Probe, RefData>             probes;
             ESMS::CellRefList<ESM::Repair, RefData>            repairs;
             ESMS::CellRefList<ESM::Weapon, RefData>            weapons;
+            int mStateId;
+            mutable float mCachedWeight;
+            mutable bool mWeightUpToDate;
 
         public:
+
+            ContainerStore();
 
             virtual ~ContainerStore();
 
@@ -61,19 +66,43 @@ namespace MWWorld
 
             ContainerStoreIterator end();
 
-            void add (const Ptr& ptr);
-            ///< Add the item pointed to by \a ptr to this container.
+            ContainerStoreIterator add (const Ptr& ptr);
+            ///< Add the item pointed to by \a ptr to this container. (Stacks automatically if needed)
             ///
             /// \note The item pointed to is not required to exist beyond this function call.
             ///
             /// \attention Do not add items to an existing stack by increasing the count instead of
             /// calling this function!
+            ///
+            /// @return if stacking happened, return iterator to the item that was stacked against, otherwise iterator to the newly inserted item.
+
+        protected:
+            ContainerStoreIterator addImpl (const Ptr& ptr);
+            ///< Add the item to this container (no stacking)
+
+            virtual bool stacks (const Ptr& ptr1, const Ptr& ptr2);
+            ///< @return true if the two specified objects can stack with each other
+            /// @note ptr1 is the item that is already in this container
+
+        public:
 
             void fill (const ESM::InventoryList& items, const ESMS::ESMStore& store);
             ///< Insert items into *this.
 
             void clear();
             ///< Empty container.
+
+            virtual void flagAsModified();
+            ///< \attention This function is internal to the world model and should not be called from
+            /// outside.
+
+            int getStateId() const;
+            ///< This ID is changed every time the container is modified or items in the container
+            /// are accessed in a way that may be used to modify the item.
+            /// \note This method of change-tracking will ocasionally yield false positives.
+
+            float getWeight() const;
+            ///< Return total weight of the items contained in *this.
 
             static int getType (const Ptr& ptr);
             ///< This function throws an exception, if ptr does not point to an object, that can be
@@ -113,6 +142,20 @@ namespace MWWorld
 
             ContainerStoreIterator (int mask, ContainerStore *container);
             ///< Begin-iterator
+
+            // construct iterator using a CellRefList iterator
+            ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Potion, RefData>::List::iterator);
+            ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Apparatus, RefData>::List::iterator);
+            ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Armor, RefData>::List::iterator);
+            ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Book, RefData>::List::iterator);
+            ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Clothing, RefData>::List::iterator);
+            ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Ingredient, RefData>::List::iterator);
+            ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Light, RefData>::List::iterator);
+            ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Tool, RefData>::List::iterator);
+            ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Miscellaneous, RefData>::List::iterator);
+            ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Probe, RefData>::List::iterator);
+            ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Repair, RefData>::List::iterator);
+            ContainerStoreIterator (ContainerStore *container, ESMS::CellRefList<ESM::Weapon, RefData>::List::iterator);
 
             void incType();
 

@@ -3,9 +3,13 @@ OpenMW: A reimplementation of The Elder Scrolls III: Morrowind
 OpenMW is an attempt at recreating the engine for the popular role-playing game
 Morrowind by Bethesda Softworks. You need to own and install the original game for OpenMW to work.
 
-Version: 0.12.0
+Version: 0.15.0
 License: GPL (see GPL3.txt for more information)
 Website: http://www.openmw.org
+
+Font Licenses:
+EBGaramond-Regular.ttf: OFL (see OFL.txt for more information)
+VeraMono.ttf: custom (see Bitstream Vera License.txt for more information)
 
 
 THIS IS A WORK IN PROGRESS
@@ -25,8 +29,7 @@ There's an OpenMW package available in the AUR Repository:
 http://aur.archlinux.org/packages.php?ID=21419
 
 OS X:
-TODO add description for OS X
-
+Open DMG file, copy OpenMW folder anywhere, for example in /Applications
 
 BUILD FROM SOURCE
 
@@ -61,8 +64,6 @@ Allowed options:
   --start arg (=Beshara)           set initial cell
   --master arg                     master file(s)
   --plugin arg                     plugin file(s)
-  --fps [=arg(=1)] (=0)            fps counter detail (0 = off, 1 = fps counter
-                                   , 2 = full detail)
   --anim-verbose [=arg(=1)] (=0)   output animation indices files
   --debug [=arg(=1)] (=0)          debug mode
   --nosound [=arg(=1)] (=0)        disable all sounds
@@ -86,22 +87,28 @@ Allowed options:
 
                                    win1252 - Western European (Latin) alphabet,
                                    used by default
-  --report-focus [=arg(=1)] (=0)   write name of focussed object to cout
+  --fallback arg                   fallback values
 
 
 CREDITS
 
 Current Developers:
+Aleksandar Jovanov
 Alexander “Ace” Olofsson
 athile
+BrotherBrick
 Cris “Mirceam” Mihalache
 gugus / gus
 Jacob “Yacoby” Essex
+Jannik “scrawl” Heller
 Jason “jhooks” Hooks
+Karl-Felix “k1ll” Glatzer
 Lukasz “lgro” Gromanowski
 Marc “Zini” Zinnschlag
+Michael “werdanith” Papageorgiou
 Nikolay “corristo” Kasyanov
 Pieter “pvdk” van der Kloet
+Roman "Kromgart" Melnik
 Sebastian “swick” Wick
 
 Retired Developers:
@@ -111,7 +118,6 @@ Diggory Hardy
 Jan Borsodi
 Jan-Peter “peppe” Nilsson
 Josua Grawitter
-Karl-Felix “k1ll” Glatzer
 Nicolay Korslund
 sergoz
 Star-Demon
@@ -125,6 +131,95 @@ Thanks to Kevin Ryan for kindly providing us with the icon used for the Data Fil
 
 
 CHANGELOG
+
+0.15.0
+
+Bug #5: Physics reimplementation (fixes various issues)
+Bug #258: Resizing arrow's background is not transparent
+Bug #268: Widening the stats window in X direction causes layout problems
+Bug #269: Topic pane in dialgoue window is too small for some longer topics
+Bug #271: Dialog choices are sorted incorrectly
+Bug #281: The single quote character is not rendered on dialog windows
+Bug #285: Terrain not handled properly in cells that are not predefined
+Bug #289: Dialogue filter isn't doing case smashing/folding for item IDs
+Feature #15: Collision with Terrain
+Feature #17: Inventory-, Container- and Trade-Windows
+Feature #44: Floating Labels above Focussed Objects
+Feature #80: Tooltips
+Feature #83: Barter Dialogue
+Feature #90: Book and Scroll Windows
+Feature #156: Item Stacking in Containers
+Feature #213: Pulsating lights
+Feature #218: Feather & Burden
+Feature #256: Implement magic effect bookkeeping
+Feature #259: Add missing information to Stats window
+Feature #260: Correct case for dialogue topics
+Feature #280: GUI texture atlasing
+Feature #291: Ability to use GMST strings from GUI layout files
+Task #255: Make MWWorld::Environment into a singleton
+
+0.14.0
+
+Bug #1: Meshes rendered with wrong orientation
+Bug #6/Task #220: Picking up small objects doesn't always work
+Bug #127: tcg doesn't work
+Bug #178: Compablity problems with Ogre 1.8.0 RC 1
+Bug #211: Wireframe mode (toggleWireframe command) should not apply to Console & other UI
+Bug #227: Terrain crashes when moving away from predefined cells
+Bug #229: On OS X Launcher cannot launch game if path to binary contains spaces
+Bug #235: TGA texture loading problem
+Bug #246: wireframe mode does not work in water
+Feature #8/#232: Water Rendering
+Feature #13: Terrain Rendering
+Feature #37: Render Path Grid
+Feature #66: Factions
+Feature #77: Local Map
+Feature #78: Compass/Mini-Map
+Feature #97: Render Clothing/Armour
+Feature #121: Window Pinning
+Feature #205: Auto equip
+Feature #217: Contiainer should track changes to its content
+Feature #221: NPC Dialogue Window Enhancements
+Feature #233: Game settings manager
+Feature #240: Spell List and selected spell (no GUI yet)
+Feature #243: Draw State
+Task #113: Morrowind.ini Importer
+Task #215: Refactor the sound code
+Task #216: Update MyGUI
+
+
+0.13.0
+
+Bug #145: Fixed sound problems after cell change
+Bug #179: Pressing space in console triggers activation
+Bug #186: CMake doesn't use the debug versions of Ogre libraries on Linux
+Bug #189: ASCII 16 character added to console on it's activation on Mac OS X
+Bug #190: Case Folding fails with music files
+Bug #192: Keypresses write Text into Console no matter which gui element is active
+Bug #196: Collision shapes out of place
+Bug #202: ESMTool doesn't not work with localised ESM files anymore
+Bug #203: Torch lights only visible on short distance
+Bug #207: Ogre.log not written
+Bug #209: Sounds do not play
+Bug #210: Ogre crash at Dren plantation
+Bug #214: Unsupported file format version
+Bug #222: Launcher is writing openmw.cfg file to wrong location
+Feature #9: NPC Dialogue Window
+Feature #16/42: New sky/weather implementation
+Feature #40: Fading
+Feature #48: NPC Dialogue System
+Feature #117: Equipping Items (backend only, no GUI yet, no rendering of equipped items yet)
+Feature #161: Load REC_PGRD records
+Feature #195: Wireframe-mode
+Feature #198/199: Various sound effects
+Feature #206: Allow picking data path from launcher if non is set
+Task #108: Refactor window manager class
+Task #172: Sound Manager Cleanup
+Task #173: Create OpenEngine systems in the appropriate manager classes
+Task #184: Adjust MSVC and gcc warning levels
+Task #185: RefData rewrite
+Task #201: Workaround for transparency issues
+Task #208: silenced esm_reader.hpp warning
 
 0.12.0
 

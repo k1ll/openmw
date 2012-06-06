@@ -7,6 +7,8 @@
 
 #include "../mwscript/extensions.hpp"
 
+#include "../mwbase/environment.hpp"
+
 namespace MWGui
 {
     class ConsoleInterpreterContext : public MWScript::InterpreterContext
@@ -15,15 +17,14 @@ namespace MWGui
 
         public:
 
-            ConsoleInterpreterContext (Console& console, MWWorld::Environment& environment,
-                MWWorld::Ptr reference);
+            ConsoleInterpreterContext (Console& console, MWWorld::Ptr reference);
 
             virtual void report (const std::string& message);
     };
 
     ConsoleInterpreterContext::ConsoleInterpreterContext (Console& console,
-        MWWorld::Environment& environment, MWWorld::Ptr reference)
-    : MWScript::InterpreterContext (environment,
+        MWWorld::Ptr reference)
+    : MWScript::InterpreterContext (
         reference.isEmpty() ? 0 : &reference.getRefData().getLocals(), reference),
       mConsole (console)
     {}
@@ -50,7 +51,7 @@ namespace MWGui
 
             return isGood();
         }
-        catch (const Compiler::SourceException& error)
+        catch (const Compiler::SourceException&)
         {
             // error has already been reported via error handler
         }
@@ -88,7 +89,7 @@ namespace MWGui
             scanner.listKeywords (mNames);
 
             // identifier
-            const ESMS::ESMStore& store = mEnvironment.mWorld->getStore();
+            const ESMS::ESMStore& store = MWBase::Environment::get().getWorld()->getStore();
 
             for (ESMS::RecListList::const_iterator iter (store.recLists.begin());
                 iter!=store.recLists.end(); ++iter)
@@ -101,11 +102,9 @@ namespace MWGui
         }
     }
 
-    Console::Console(int w, int h, MWWorld::Environment& environment,
-        const Compiler::Extensions& extensions, int tabCompletionMode)
+    Console::Console(int w, int h, const Compiler::Extensions& extensions, int tabCompletionMode)
       : Layout("openmw_console_layout.xml"),
-        mCompilerContext (MWScript::CompilerContext::Type_Console, environment),
-        mEnvironment (environment),
+        mCompilerContext (MWScript::CompilerContext::Type_Console),
         completionMode(tabCompletionMode),
         pagesize(5)
     {
@@ -115,9 +114,9 @@ namespace MWGui
         getWidget(history, "list_History");
 
         // Set up the command line box
-        command->eventEditSelectAccept =
+        command->eventEditSelectAccept +=
             newDelegate(this, &Console::acceptCommand);
-        command->eventKeyButtonPressed =
+        command->eventKeyButtonPressed +=
             newDelegate(this, &Console::keyPress);
 
         // Set up the log window
@@ -141,6 +140,10 @@ namespace MWGui
     void Console::disable()
     {
         setVisible(false);
+        setSelectedObject(MWWorld::Ptr());
+        // Remove keyboard focus from the console input whenever the
+        // console is turned off
+        MyGUI::InputManager::getInstance().setKeyFocusWidget(NULL);
     }
 
     void Console::setFont(const std::string &fntName)
@@ -267,7 +270,7 @@ namespace MWGui
         {
             try
             {
-                ConsoleInterpreterContext interpreterContext (*this, mEnvironment, MWWorld::Ptr());
+                ConsoleInterpreterContext interpreterContext (*this, mPtr);
                 Interpreter::Interpreter interpreter;
                 MWScript::installOpcodes (interpreter);
                 std::vector<Interpreter::Type_Code> code;
@@ -372,7 +375,7 @@ namespace MWGui
             if( ( matches.front().find(' ') != string::npos )  ) {
                 if( !has_front_quote )
                     output.append(string("\""));
-                return output.append(matches.front() + string("\" ")); 
+                return output.append(matches.front() + string("\" "));
             }
             else if( has_front_quote ) {
                 return  output.append(matches.front() + string("\" "));
@@ -391,11 +394,30 @@ namespace MWGui
                     /* Append the longest match to the end of the output string*/
                     output.append(matches.front().substr( 0, i));
                     return output;
-                }  
+                }
             }
         }
 
         /* All keywords match with the shortest. Append it to the output string and return it. */
         return output.append(matches.front());
+    }
+
+    void Console::onResChange(int width, int height)
+    {
+        setCoord(10,10, width-10, height/2);
+    }
+
+    void Console::setSelectedObject(const MWWorld::Ptr& object)
+    {
+        mPtr = object;
+        if (!mPtr.isEmpty())
+            setTitle("#{sConsoleTitle} (" + mPtr.getCellRef().refID + ")");
+        else
+            setTitle("#{sConsoleTitle}");
+    }
+
+    void Console::onReferenceUnavailable()
+    {
+        setSelectedObject(MWWorld::Ptr());
     }
 }
