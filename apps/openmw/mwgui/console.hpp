@@ -107,7 +107,7 @@ namespace MWGui
 
     std::string findMatches(const std::string input, std::vector<std::string> &matches, const std::vector<std::string> &in_keywords);
 
-    bool compare(const char x, const char y);
+    bool isEqual(const char x, const char y);
   };
 }
 #endif

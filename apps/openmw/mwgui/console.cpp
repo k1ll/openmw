@@ -312,7 +312,7 @@ namespace MWGui
             else
             {
                 if(matches.size() == 1)
-					return input.substr(0, splitPos) + output + ' ';
+                    return input.substr(0, splitPos) + output + ' ';
 
                 return input.substr(0, splitPos) + output;
             }
@@ -321,7 +321,7 @@ namespace MWGui
         return input;
     }
 
-	//Searches and returns the position which most likely is the start of the string which should be completed
+    //Searches and returns the position which most likely is the start of the string which should be completed
 
     int Console::getSplitPos(const std::string input)
     {
@@ -406,7 +406,7 @@ namespace MWGui
 
             /* Is the beginning of the string different from the input string? If yes skip it. */
             for(std::string::const_iterator iter=input.begin(), iter2=(*it).begin(); iter < input.end();iter++, iter2++) {
-                if(!compare(*iter,*iter2)) {
+                if(!isEqual(*iter,*iter2)) {
                     stringDifferent=true;
                     break;
                 }
@@ -433,7 +433,7 @@ namespace MWGui
 
         for(std::string::iterator iter=matches.front().begin()+input.length(); iter < matches.front().end(); iter++, i++) {
             for(std::vector<std::string>::iterator it=matches.begin(); it < matches.end();it++) {
-                if(!compare((*it)[i],*iter)) {
+                if(!isEqual((*it)[i],*iter)) {
                     /* Return the longest match found */
                     return matches.front().substr(0, i);
                 }
@@ -444,7 +444,7 @@ namespace MWGui
         return matches.front();
     }
 
-    bool Console::compare(const char x, const char y)
+    bool Console::isEqual(const char x, const char y)
     {
         if(mCaseSensitive)
             return x == y;
