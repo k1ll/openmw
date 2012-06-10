@@ -42,10 +42,11 @@ namespace MWGui
         /// time).
 
         /// Used by the tab completion
-		int completionMode;
-        std::string lastcomplete;
-        const int pagesize;
-        int page;
+        int mCompletionMode;
+        std::string mLastComplete;
+        const int mPagesize;
+        int mPage;
+        bool mCaseSensitive;
 
     public:
 
@@ -100,7 +101,13 @@ namespace MWGui
 
     void acceptCommand(MyGUI::EditPtr _sender);
 
-    std::string complete( std::string input, std::vector<std::string> &matches, const std::vector<std::string> &in_keywords );
+    std::string complete(const std::string input, std::vector<std::string> &matches, const std::vector<std::string> &in_keywords);
+
+    int getSplitPos(const std::string input);
+
+    std::string findMatches(const std::string input, std::vector<std::string> &matches, const std::vector<std::string> &in_keywords);
+
+    bool compare(const char x, const char y);
   };
 }
 #endif

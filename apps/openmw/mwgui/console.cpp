@@ -105,8 +105,9 @@ namespace MWGui
     Console::Console(int w, int h, const Compiler::Extensions& extensions, int tabCompletionMode)
       : Layout("openmw_console_layout.xml"),
         mCompilerContext (MWScript::CompilerContext::Type_Console),
-        completionMode(tabCompletionMode),
-        pagesize(5)
+        mCompletionMode(tabCompletionMode),
+        mPagesize(5),
+        mCaseSensitive(false)
     {
         setCoord(10,10, w-10, h/2);
 
@@ -176,46 +177,46 @@ namespace MWGui
                   MyGUI::KeyCode key,
                   MyGUI::Char _char)
     {
-        if( key == MyGUI::KeyCode::Tab)
+        if(key == MyGUI::KeyCode::Tab)
         {
             std::vector<std::string> matches;
             std::string current;
 
             listNames();
 
-            if( completionMode >= 1 )
+            if(mCompletionMode >= 1)
             {
-                current=complete( command->getCaption(), matches, mNames );
+                current=complete(command->getCaption(), matches, mNames);
 
                 command->setCaption(current);
                 /* Display completition possibilites when tab is pressed atleast twice (the input stayed the same ). */
-                if( ( completionMode == 2 ) && ( matches.size() > 1 ) && ( command->getCaption() == lastcomplete ) )
+                if((mCompletionMode == 2) && (matches.size() > 1) && (command->getCaption() == mLastComplete))
                 {
                     bool end=false;
                     /* Only display the current "page". */
-                    for(std::vector<std::string>::iterator it=matches.begin()+(page*pagesize);it < matches.begin()+pagesize+(page*pagesize);it++)
+                    for(std::vector<std::string>::iterator it=matches.begin()+(mPage*mPagesize);it < matches.begin()+mPagesize+(mPage*mPagesize);it++)
                     {
                         if(it<matches.end()) {
-                            printOK( *it );
+                            printOK(*it);
                         }
                         else {
                             end=true;
                             break;
                         }
                     }
-                    if( end ) {
-                        page=0;
+                    if(end) {
+                        mPage=0;
                     }
                     else {
-                        page++;
+                        mPage++;
                     }
-                    printOK( std::string("\n") );
+                    printOK(std::string("\n"));
                 }
                 else
                 {
-                    page=0;
+                    mPage=0;
                 }
-                lastcomplete=current;
+                mLastComplete=current;
             }
         }
 
@@ -286,77 +287,132 @@ namespace MWGui
         command->setCaption("");
     }
 
-    std::string Console::complete( std::string input, std::vector<std::string> &matches, const std::vector<std::string> &in_keywords )
+    std::string Console::complete(const std::string input, std::vector<std::string> &matches, const std::vector<std::string> &in_keywords)
     {
-        using namespace std;
-        string output=input;
-        string tmp=input;
-        bool has_front_quote = false;
-        vector<string> keywords = in_keywords;
+        int splitPos;
+        std::string output;
+        splitPos = getSplitPos(input);
+        output = findMatches(input.substr(splitPos), matches, in_keywords);
 
-        /* Does the input string contain things that don't have to be completed? If yes erase them. */
-        /* Are there quotation marks? */
-        if( tmp.find('"') != string::npos ) {
-            int numquotes=0;
-            for(string::iterator it=tmp.begin(); it < tmp.end(); it++) {
-                if( *it == '"' )
-                    numquotes++;
-            }
+        //Combine the completed string with the base string and add quotation marks where necessary
+        if(matches.size() > 0)
+        {
+            if(output.find(' ') != std::string::npos)
+            {
+                if(input[splitPos-1] != '"')
+                    output = input.substr(0, splitPos) + '"' + output;
+                else
+                    output = input.substr(0, splitPos) + output;
 
-            /* Is it terminated?*/
-            if( numquotes % 2 ) {
-                tmp.erase( 0, tmp.rfind('"')+1 );
-                has_front_quote = true;
+                if(matches.size() == 1)
+                    output += "\" ";
+
+                return output;
             }
-            else {
-                size_t pos;
-                if( ( ((pos = tmp.rfind(' ')) != string::npos ) ) && ( pos > tmp.rfind('"') ) ) {
-                    tmp.erase( 0, tmp.rfind(' ')+1);
-                }
-                else {
-                    tmp.clear();
-                }
-                has_front_quote = false;
+            else
+            {
+                if(matches.size() == 1)
+					return input.substr(0, splitPos) + output + ' ';
+
+                return input.substr(0, splitPos) + output;
             }
         }
-        /* No quotation marks. Are there spaces?*/
-        else {
-            size_t rpos;
-            if( (rpos=tmp.rfind(' ')) != string::npos ) {
-                if( rpos == 0 ) {
-                    tmp.clear();
+
+        return input;
+    }
+
+	//Searches and returns the position which most likely is the start of the string which should be completed
+
+    int Console::getSplitPos(const std::string input)
+    {
+        int splitPos=0;
+        bool openQuote=false;
+
+        for(int i = 0; i < static_cast<int>(input.length()); i++) {
+            switch(input[i]) {
+            case '"':
+                    if(openQuote)
+                    {
+                        openQuote = false;
+                        //std::cout << i << ":Found end quote." << std::endl;
+                        splitPos = i+1;
+                        continue;
+                    }
+
+                    openQuote = true;
+                    splitPos = i+1;
+            break;
+
+            case '-': //->
+                if(input[i+1] == '>')
+                {
+                    if(openQuote)
+                    {
+                        //std::cout << i << ":Expected \" but found -> instead." << std::endl;
+                        return 0;
+                    }
+
+                    splitPos = i+2;
                 }
-                else {
-                    tmp.erase(0, rpos+1);
-                }
+            break;
+
+            case '.':
+                    if(openQuote)
+                    {
+                        //std::cout << i << ":Expected \" but found . instead." << std::endl;
+                        return 0;
+                    }
+
+                    splitPos = i+1;
+            break;
+
+            case ' ':
+                    if(openQuote)
+                    {
+                        //std::cout << i << ":Skipping white space in quotes." << std::endl;
+                        continue;
+                    }
+
+                    splitPos = i+1;
+            break;
+
+            default:
+                continue;
             }
         }
-        /* Erase the input from the output string so we can easily append the completed form later. */
-        output.erase(output.end()-tmp.length(), output.end());
 
-        /* Is there still something in the input string? If not just display all commands and return the unchanged input. */
-        if( tmp.length() == 0 ) {
-                matches=keywords;
+        return splitPos;
+    }
+
+    //Finds all strings in the vector in_keywords which start with the string input and saves them in the vector matches
+    //Returns a string containing the part at the start of all strings in matches which is the same 
+
+    std::string Console::findMatches(const std::string input, std::vector<std::string> &matches, const std::vector<std::string> &in_keywords)
+    {
+        std::vector<std::string> keywords = in_keywords;
+
+        if(input.length() == 0) {
+            matches=keywords;
             return input;
         }
 
         /* Iterate through the vector. */
-        for(vector<string>::iterator it=keywords.begin(); it < keywords.end();it++) {
-            bool string_different=false;
+        for(std::vector<std::string>::iterator it=keywords.begin(); it < keywords.end();it++) {
+            bool stringDifferent=false;
 
             /* Is the string shorter than the input string? If yes skip it. */
-            if( (*it).length() < tmp.length() )
+            if((*it).length() < input.length())
                 continue;
 
             /* Is the beginning of the string different from the input string? If yes skip it. */
-            for( string::iterator iter=tmp.begin(), iter2=(*it).begin(); iter < tmp.end();iter++, iter2++) {
-                if( tolower(*iter) != tolower(*iter2) ) {
-                    string_different=true;
+            for(std::string::const_iterator iter=input.begin(), iter2=(*it).begin(); iter < input.end();iter++, iter2++) {
+                if(!compare(*iter,*iter2)) {
+                    stringDifferent=true;
                     break;
                 }
             }
 
-            if( string_different )
+            if(stringDifferent)
                 continue;
 
             /* The beginning of the string matches the input string, save it for the next test. */
@@ -364,42 +420,36 @@ namespace MWGui
         }
 
         /* There are no matches. Return the unchanged input. */
-        if( matches.empty() )
-        {
+        if(matches.empty())
             return input;
-        }
 
         /* Only one match. We're done. */
-        if( matches.size() == 1 ) {
-            /* Adding quotation marks when the input string started with a quotation mark or has spaces in it*/
-            if( ( matches.front().find(' ') != string::npos )  ) {
-                if( !has_front_quote )
-                    output.append(string("\""));
-                return output.append(matches.front() + string("\" "));
-            }
-            else if( has_front_quote ) {
-                return  output.append(matches.front() + string("\" "));
-            }
-            else {
-                return output.append(matches.front() + string(" "));
-            }
-        }
+        if(matches.size() == 1)
+            return matches.front();
 
         /* Check if all matching strings match further than input. If yes complete to this match. */
-        int i = tmp.length();
 
-        for(string::iterator iter=matches.front().begin()+tmp.length(); iter < matches.front().end(); iter++, i++) {
-            for(vector<string>::iterator it=matches.begin(); it < matches.end();it++) {
-                if( tolower((*it)[i]) != tolower(*iter) ) {
-                    /* Append the longest match to the end of the output string*/
-                    output.append(matches.front().substr( 0, i));
-                    return output;
+        int i = input.length();
+
+        for(std::string::iterator iter=matches.front().begin()+input.length(); iter < matches.front().end(); iter++, i++) {
+            for(std::vector<std::string>::iterator it=matches.begin(); it < matches.end();it++) {
+                if(!compare((*it)[i],*iter)) {
+                    /* Return the longest match found */
+                    return matches.front().substr(0, i);
                 }
             }
         }
 
-        /* All keywords match with the shortest. Append it to the output string and return it. */
-        return output.append(matches.front());
+        //This should never be called.
+        return matches.front();
+    }
+
+    bool Console::compare(const char x, const char y)
+    {
+        if(mCaseSensitive)
+            return x == y;
+        else
+            return tolower(x) == tolower(y);
     }
 
     void Console::onResChange(int width, int height)
