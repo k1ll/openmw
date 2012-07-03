@@ -106,7 +106,7 @@ namespace MWGui
     }
 
     Console::Console(int w, int h, const Compiler::Extensions& extensions, int tabCompletionMode)
-      : Layout("openmw_console_layout"),
+      : Layout("openmw_console.layout"),
         mCompilerContext (MWScript::CompilerContext::Type_Console),
         mCompletionMode(tabCompletionMode),
         mPagesize(5),
