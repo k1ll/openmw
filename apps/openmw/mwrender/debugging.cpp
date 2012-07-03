@@ -1,17 +1,22 @@
 #include "debugging.hpp"
 
-#include <assert.h>
+#include <cassert>
 
 #include <OgreNode.h>
 #include <OgreSceneManager.h>
 #include <OgreMaterial.h>
 #include <OgreMaterialManager.h>
+#include <OgreManualObject.h>
 
-#include "../mwworld/world.hpp" // these includes can be removed once the static-hack is gone
-#include "../mwbase/environment.hpp"
-#include "../mwworld/ptr.hpp"
 #include <components/esm/loadstat.hpp>
 #include <components/esm/loadpgrd.hpp>
+
+#include <components/esm_store/store.hpp>
+
+#include "../mwbase/world.hpp" // these includes can be removed once the static-hack is gone
+#include "../mwbase/environment.hpp"
+
+#include "../mwworld/ptr.hpp"
 
 #include "player.hpp"
 
@@ -68,7 +73,7 @@ ManualObject *Debugging::createPathgridLines(const ESM::Pathgrid *pathgrid)
     result->begin(PATHGRID_LINE_MATERIAL, RenderOperation::OT_LINE_LIST);
     for(ESM::Pathgrid::EdgeList::const_iterator it = pathgrid->edges.begin();
         it != pathgrid->edges.end();
-        it++)
+        ++it)
     {
         const ESM::Pathgrid::Edge &edge = *it;
         const ESM::Pathgrid::Point &p1 = pathgrid->points[edge.v0], &p2 = pathgrid->points[edge.v1];
@@ -162,11 +167,11 @@ Debugging::~Debugging()
 bool Debugging::toggleRenderMode (int mode){
     switch (mode)
     {
-        case MWWorld::World::Render_CollisionDebug:
+        case MWBase::World::Render_CollisionDebug:
 
             return mEngine->toggleDebugRendering();
 
-        case MWWorld::World::Render_Pathgrid:
+        case MWBase::World::Render_Pathgrid:
             togglePathgrid();
             return mPathgridEnabled;
     }
@@ -197,7 +202,7 @@ void Debugging::togglePathgrid()
 
         // add path grid meshes to already loaded cells
         mPathGridRoot = mMwRoot->createChildSceneNode();
-        for(CellList::iterator it = mActiveCells.begin(); it != mActiveCells.end(); it++)
+        for(CellList::iterator it = mActiveCells.begin(); it != mActiveCells.end(); ++it)
         {
             enableCellPathgrid(*it);
         }
@@ -205,7 +210,7 @@ void Debugging::togglePathgrid()
     else
     {
         // remove path grid meshes from already loaded cells
-        for(CellList::iterator it = mActiveCells.begin(); it != mActiveCells.end(); it++)
+        for(CellList::iterator it = mActiveCells.begin(); it != mActiveCells.end(); ++it)
         {
             disableCellPathgrid(*it);
         }

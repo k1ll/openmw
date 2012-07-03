@@ -1,17 +1,20 @@
 #include "weather.hpp"
-#include "world.hpp"
-#include "player.hpp"
-
-#include "../mwrender/renderingmanager.hpp"
-#include "../mwsound/soundmanager.hpp"
 
 #include <ctime>
 #include <cstdlib>
-#include <iostream>
 
 #include <boost/algorithm/string.hpp>
 
+#include <components/esm_store/store.hpp>
+
 #include "../mwbase/environment.hpp"
+#include "../mwbase/world.hpp"
+
+#include "../mwrender/renderingmanager.hpp"
+
+#include "../mwsound/soundmanager.hpp"
+
+#include "player.hpp"
 
 using namespace Ogre;
 using namespace MWWorld;
@@ -38,7 +41,8 @@ const float WeatherGlobals::mThunderSoundDelay = 0.25;
 
 WeatherManager::WeatherManager(MWRender::RenderingManager* rendering) :
      mHour(14), mCurrentWeather("clear"), mFirstUpdate(true), mWeatherUpdateTime(0),
-     mThunderFlash(0), mThunderChance(0), mThunderChanceNeeded(50), mThunderSoundDelay(0)
+     mThunderFlash(0), mThunderChance(0), mThunderChanceNeeded(50), mThunderSoundDelay(0),
+     mRemainingTransitionTime(0), mMonth(0), mDay(0)
 {
     mRendering = rendering;
 

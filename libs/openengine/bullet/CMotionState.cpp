@@ -4,13 +4,14 @@
 #include <btBulletDynamicsCommon.h>
 #include <btBulletCollisionCommon.h>
 #include <components/nifbullet/bullet_nif_loader.hpp>
-//#include <apps\openmw\mwworld\world.hpp>
 
 namespace OEngine {
 namespace Physic
 {
 
     CMotionState::CMotionState(PhysicEngine* eng,std::string name)
+        : isPC(false)
+        , isNPC(true)
     {
         pEng = eng;
         tr.setIdentity();

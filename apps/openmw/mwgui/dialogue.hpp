@@ -19,7 +19,7 @@ namespace MWGui
 
 /*
   This file contains the dialouge window
-  Layout is defined by resources/mygui/openmw_dialogue_window_layout.xml.
+  Layout is defined by resources/mygui/openmw_dialogue_window.layout.
  */
 
 namespace MWGui
@@ -77,7 +77,6 @@ namespace MWGui
         Widgets::MWList*      topicsList;
         MyGUI::ProgressPtr pDispositionBar;
         MyGUI::EditPtr pDispositionText;
-        std::map<std::string,std::string> pTopicsText;// this map links keyword and "real" text.
     };
 }
 #endif

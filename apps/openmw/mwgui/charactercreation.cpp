@@ -117,6 +117,7 @@ CharacterCreation::CharacterCreation(WindowManager* _wm)
     , mCreateClassDialog(0)
     , mBirthSignDialog(0)
     , mReviewDialog(0)
+    , mGenerateClassStep(0)
     , mWM(_wm)
 {
     mCreationStage = CSE_NotStarted;
@@ -707,6 +708,9 @@ void CharacterCreation::onGenerateClassDone(WindowBase* parWindow)
     if (mGenerateClassResultDialog)
         mWM->removeDialog(mGenerateClassResultDialog);
     MWBase::Environment::get().getMechanicsManager()->setPlayerClass(mGenerateClass);
+    const ESM::Class *klass = MWBase::Environment::get().getWorld()->getStore().classes.find(mGenerateClass);
+    mPlayerClass = *klass;
+    mWM->setPlayerClass(mPlayerClass);
 
     if (mCreationStage == CSE_ReviewNext)
     {

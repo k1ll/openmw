@@ -3,20 +3,23 @@
 #include <cmath>
 #include <algorithm>
 #include <iterator>
-#include <assert.h>
-#include <iostream>
+#include <cassert>
 
 #include <boost/lexical_cast.hpp>
 
-#include "../mwclass/container.hpp"
+#include "../mwbase/world.hpp"
+#include "../mwbase/environment.hpp"
+
 #include "../mwworld/containerstore.hpp"
 #include "../mwworld/class.hpp"
-#include "../mwworld/world.hpp"
 #include "../mwworld/player.hpp"
-#include "../mwbase/environment.hpp"
 #include "../mwworld/manualref.hpp"
 #include "../mwworld/actiontake.hpp"
+#include "../mwworld/inventorystore.hpp"
+
 #include "../mwsound/soundmanager.hpp"
+
+#include "../mwclass/container.hpp"
 
 #include "window_manager.hpp"
 #include "widgets.hpp"
@@ -42,7 +45,7 @@ namespace MWGui
 
     InventoryWindow::InventoryWindow(WindowManager& parWindowManager,DragAndDrop* dragAndDrop)
         : ContainerBase(dragAndDrop)
-        , WindowPinnableBase("openmw_inventory_window_layout.xml", parWindowManager)
+        , WindowPinnableBase("openmw_inventory_window.layout", parWindowManager)
         , mTrading(false)
     {
         static_cast<MyGUI::Window*>(mMainWidget)->eventWindowChangeCoord += MyGUI::newDelegate(this, &InventoryWindow::onWindowResize);
@@ -171,7 +174,7 @@ namespace MWGui
             /// \todo scripts
 
             boost::shared_ptr<MWWorld::Action> action = MWWorld::Class::get(ptr).use(ptr);
-            
+
             action->execute();
 
             // this is necessary for books/scrolls: if they are already in the player's inventory,
@@ -303,6 +306,7 @@ namespace MWGui
             && (type != typeid(ESM::Tool).name())
             && (type != typeid(ESM::Probe).name())
             && (type != typeid(ESM::Repair).name())
+            && (type != typeid(ESM::Weapon).name())
             && (type != typeid(ESM::Potion).name()))
             return;
 
@@ -311,17 +315,23 @@ namespace MWGui
         MWBase::Environment::get().getSoundManager()->playSound(sound, 1, 1);
 
         int count = object.getRefData().getCount();
-        MWWorld::ActionTake action(object);
-        action.execute();
+
+        // add to player inventory
+        // can't use ActionTake here because we need an MWWorld::Ptr to the newly inserted object
+        MWWorld::Ptr player = MWBase::Environment::get().getWorld()->getPlayer().getPlayer();
+        MWWorld::Ptr newObject = *MWWorld::Class::get (player).getContainerStore (player).add (object);
+        // remove from world
+        MWBase::Environment::get().getWorld()->deleteObject (object);
+
         mDragAndDrop->mIsOnDragAndDrop = true;
         mDragAndDrop->mDraggedCount = count;
 
         std::string path = std::string("icons\\");
-        path += MWWorld::Class::get(object).getInventoryIcon(object);
+        path += MWWorld::Class::get(newObject).getInventoryIcon(newObject);
         MyGUI::ImageBox* baseWidget = mContainerWidget->createWidget<ImageBox>("ImageBox", MyGUI::IntCoord(0, 0, 42, 42), MyGUI::Align::Default);
         baseWidget->detachFromWidget();
         baseWidget->attachToWidget(mDragAndDrop->mDragAndDropWidget);
-        baseWidget->setUserData(object);
+        baseWidget->setUserData(newObject);
         mDragAndDrop->mDraggedWidget = baseWidget;
         ImageBox* image = baseWidget->createWidget<ImageBox>("ImageBox", MyGUI::IntCoord(5, 5, 32, 32), MyGUI::Align::Default);
         int pos = path.rfind(".");

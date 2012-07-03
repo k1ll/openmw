@@ -1,12 +1,15 @@
 #ifndef _GAME_RENDER_OBJECTS_H
 #define _GAME_RENDER_OBJECTS_H
 
+#include <OgreColourValue.h>
+
 #include <openengine/ogre/renderer.hpp>
 
-#include <components/esm_store/cell_store.hpp>
-
-#include "../mwworld/refdata.hpp"
-#include "../mwworld/ptr.hpp"
+namespace MWWorld
+{
+    class Ptr;
+    class CellStore;
+}
 
 namespace MWRender{
 
@@ -39,17 +42,18 @@ struct LightInfo
 
     LightInfo() :
         flickerVariation(0), resetTime(0.5),
-        flickerSlowVariation(0), time(0), interior(true)
+        flickerSlowVariation(0), time(0), interior(true),
+        type(LT_Normal), radius(1.0)
     {
     }
 };
 
 class Objects{
     OEngine::Render::OgreRenderer &mRenderer;
-    std::map<MWWorld::Ptr::CellStore *, Ogre::SceneNode *> mCellSceneNodes;
-    std::map<MWWorld::Ptr::CellStore *, Ogre::StaticGeometry*> mStaticGeometry;
-    std::map<MWWorld::Ptr::CellStore *, Ogre::StaticGeometry*> mStaticGeometrySmall;
-    std::map<MWWorld::Ptr::CellStore *, Ogre::AxisAlignedBox> mBounds;
+    std::map<MWWorld::CellStore *, Ogre::SceneNode *> mCellSceneNodes;
+    std::map<MWWorld::CellStore *, Ogre::StaticGeometry*> mStaticGeometry;
+    std::map<MWWorld::CellStore *, Ogre::StaticGeometry*> mStaticGeometrySmall;
+    std::map<MWWorld::CellStore *, Ogre::AxisAlignedBox> mBounds;
     std::vector<LightInfo> mLights;
     Ogre::SceneNode* mMwRoot;
     bool mIsStatic;
@@ -68,7 +72,7 @@ class Objects{
     ///< Remove all movable objects from \a node.
 
 public:
-    Objects(OEngine::Render::OgreRenderer& renderer): mRenderer (renderer) {}
+    Objects(OEngine::Render::OgreRenderer& renderer): mRenderer (renderer), mIsStatic(false) {}
     ~Objects(){}
     void insertBegin (const MWWorld::Ptr& ptr, bool enabled, bool static_);
     void insertMesh (const MWWorld::Ptr& ptr, const std::string& mesh);
@@ -80,14 +84,14 @@ public:
     void update (const float dt);
     ///< per-frame update
 
-    Ogre::AxisAlignedBox getDimensions(MWWorld::Ptr::CellStore*);
+    Ogre::AxisAlignedBox getDimensions(MWWorld::CellStore*);
     ///< get a bounding box that encloses all objects in the specified cell
 
     bool deleteObject (const MWWorld::Ptr& ptr);
     ///< \return found?
 
-    void removeCell(MWWorld::Ptr::CellStore* store);
-    void buildStaticGeometry(ESMS::CellStore<MWWorld::RefData> &cell);
+    void removeCell(MWWorld::CellStore* store);
+    void buildStaticGeometry(MWWorld::CellStore &cell);
     void setMwRoot(Ogre::SceneNode* root);
 };
 }

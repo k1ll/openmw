@@ -3,6 +3,9 @@
 
 #include <algorithm>
 
+#include <components/esm_store/reclists.hpp>
+#include <components/esm_store/store.hpp>
+
 #include <components/compiler/exception.hpp>
 
 #include "../mwscript/extensions.hpp"
@@ -103,7 +106,7 @@ namespace MWGui
     }
 
     Console::Console(int w, int h, const Compiler::Extensions& extensions, int tabCompletionMode)
-      : Layout("openmw_console_layout.xml"),
+      : Layout("openmw_console_layout"),
         mCompilerContext (MWScript::CompilerContext::Type_Console),
         mCompletionMode(tabCompletionMode),
         mPagesize(5),
@@ -397,7 +400,7 @@ namespace MWGui
         }
 
         /* Iterate through the vector. */
-        for(std::vector<std::string>::iterator it=keywords.begin(); it < keywords.end();it++) {
+        for(std::vector<std::string>::iterator it=keywords.begin(); it < keywords.end();++it) {
             bool stringDifferent=false;
 
             /* Is the string shorter than the input string? If yes skip it. */
@@ -432,7 +435,7 @@ namespace MWGui
         int i = input.length();
 
         for(std::string::iterator iter=matches.front().begin()+input.length(); iter < matches.front().end(); iter++, i++) {
-            for(std::vector<std::string>::iterator it=matches.begin(); it < matches.end();it++) {
+            for(std::vector<std::string>::iterator it=matches.begin(); it < matches.end();++it) {
                 if(!isEqual((*it)[i],*iter)) {
                     /* Return the longest match found */
                     return matches.front().substr(0, i);
@@ -464,6 +467,7 @@ namespace MWGui
             setTitle("#{sConsoleTitle} (" + mPtr.getCellRef().refID + ")");
         else
             setTitle("#{sConsoleTitle}");
+        MyGUI::InputManager::getInstance().setKeyFocusWidget(command);
     }
 
     void Console::onReferenceUnavailable()

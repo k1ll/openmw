@@ -43,7 +43,7 @@ std::string::size_type find_str_ci(const std::string& str, const std::string& su
 
 
 DialogueWindow::DialogueWindow(WindowManager& parWindowManager)
-    : WindowBase("openmw_dialogue_window_layout.xml", parWindowManager)
+    : WindowBase("openmw_dialogue_window.layout", parWindowManager)
     , mEnabled(true)
     , mShowTrade(false)
 {
@@ -140,7 +140,6 @@ void DialogueWindow::startDialogue(MWWorld::Ptr actor, std::string npcName)
     setTitle(npcName);
 
     topicsList->clear();
-    pTopicsText.clear();
     history->eraseText(0,history->getTextLength());
     updateOptions();
 }
@@ -157,7 +156,7 @@ void DialogueWindow::setKeywords(std::list<std::string> keyWords)
     if (anyService)
         topicsList->addSeparator();
 
-    for(std::list<std::string>::iterator it = keyWords.begin(); it != keyWords.end(); it++)
+    for(std::list<std::string>::iterator it = keyWords.begin(); it != keyWords.end(); ++it)
     {
         topicsList->addItem(*it);
     }
@@ -169,7 +168,6 @@ void DialogueWindow::removeKeyword(std::string keyWord)
     if(topicsList->hasItem(keyWord))
     {
         topicsList->removeItem(keyWord);
-        pTopicsText.erase(keyWord);
     }
     topicsList->adjustSize();
 }
@@ -207,11 +205,14 @@ void addColorInString(std::string& str, const std::string& keyword,std::string c
 
 std::string DialogueWindow::parseText(std::string text)
 {
+    bool separatorReached = false; // only parse topics that are below the separator (this prevents actions like "Barter" that are not topics from getting blue-colored)
     for(unsigned int i = 0;i<topicsList->getItemCount();i++)
     {
         std::string keyWord = topicsList->getItemNameAt(i);
-        if (keyWord != "")
+        if (separatorReached && keyWord != "")
             addColorInString(text,keyWord,"#686EBA","#B29154");
+        else
+            separatorReached = true;
     }
     return text;
 }
@@ -245,7 +246,6 @@ void DialogueWindow::updateOptions()
 {
     //Clear the list of topics
     topicsList->clear();
-    pTopicsText.clear();
     history->eraseText(0,history->getTextLength());
 
     pDispositionBar->setProgressRange(100);

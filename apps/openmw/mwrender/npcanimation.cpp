@@ -1,8 +1,15 @@
 #include "npcanimation.hpp"
-#include "../mwworld/world.hpp"
-#include "renderconst.hpp"
+
+#include <OgreSceneManager.h>
+#include <OgreEntity.h>
+#include <OgreSubEntity.h>
+
+#include <components/esm_store/store.hpp>
 
 #include "../mwbase/environment.hpp"
+#include "../mwbase/world.hpp"
+
+#include "renderconst.hpp"
 
 using namespace Ogre;
 using namespace NifOgre;
@@ -38,7 +45,7 @@ NpcAnimation::NpcAnimation(const MWWorld::Ptr& ptr, OEngine::Render::OgreRendere
 	lfoot(0),
 	rfoot(0)
     {
-     ESMS::LiveCellRef<ESM::NPC, MWWorld::RefData> *ref =
+     MWWorld::LiveCellRef<ESM::NPC> *ref =
             ptr.get<ESM::NPC>();
 	 Ogre::Entity* blank = 0;
 	  std::vector<Nif::NiTriShapeCopy>* blankshape = 0;
@@ -528,7 +535,7 @@ void NpcAnimation::insertFootPart(int type, const std::string &mesh){
 
 
 }
-std::pair<Ogre::Entity*, std::vector<Nif::NiTriShapeCopy>*> NpcAnimation::insertFreePart(const std::string &mesh, const std::string suffix){
+std::pair<Ogre::Entity*, std::vector<Nif::NiTriShapeCopy>*> NpcAnimation::insertFreePart(const std::string &mesh, const std::string& suffix){
 
     std::string meshNumbered = mesh + getUniqueID(mesh + suffix) + suffix;
     NIFLoader::load(meshNumbered);
