@@ -34,6 +34,16 @@ namespace MWWorld
 
     }
 
+    bool Class::apply (const MWWorld::Ptr& ptr, const std::string& id,  const MWWorld::Ptr& actor) const
+    {
+        return false;
+    }
+
+    void Class::skillUsageSucceeded (const MWWorld::Ptr& ptr, int skill, int usageType) const
+    {
+        throw std::runtime_error ("class does not represent an actor");
+    }
+
     MWMechanics::CreatureStats& Class::getCreatureStats (const Ptr& ptr) const
     {
         throw std::runtime_error ("class does not have creature stats");
@@ -193,5 +203,13 @@ namespace MWWorld
     std::string Class::getEnchantment (const Ptr& ptr) const
     {
         return "";
+    }
+
+    void Class::adjustScale(const MWWorld::Ptr& ptr,float& scale) const
+    {
+    }
+
+    void Class::adjustRotation(const MWWorld::Ptr& ptr,float& x,float& y,float& z) const
+    {
     }
 }

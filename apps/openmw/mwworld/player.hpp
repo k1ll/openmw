@@ -83,7 +83,7 @@ namespace MWWorld
 
         void setClass (const ESM::Class& class_);
 
-        void setDrawState(const DrawState& state);
+        void setDrawState (MWMechanics::DrawState_ state);
 
         std::string getName() const
         {
@@ -115,7 +115,7 @@ namespace MWWorld
             return mAutoMove;
         }
 
-        DrawState getDrawState();
+        MWMechanics::DrawState_ getDrawState(); /// \todo constness
 
         void setAutoMove (bool enable);
 
