@@ -296,6 +296,11 @@ else ()
     add_definitions(-DOGRE_PLUGIN_DEBUG_SUFFIX="_d")
 endif()
 
+if(BUILD_TGZ)
+add_definitions(-DOGRE_PLUGIN_DIR_REL="./plugins")
+endif()
+add_definitions(-DOGRE_PLUGIN_DIR_DBG="${OGRE_PLUGIN_DIR_DBG}")
+
 if (APPLE AND OPENMW_OSX_DEPLOYMENT)
     # make it empty so plugin loading code can check this and try to find plugins inside app bundle
     add_definitions(-DOGRE_PLUGIN_DIR="")
@@ -419,20 +424,12 @@ if(BUILD_TGZ)
     INSTALL(FILES "${OpenMW_BINARY_DIR}/settings-default.cfg" DESTINATION "." PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
     INSTALL(FILES "${OpenMW_BINARY_DIR}/transparency-overrides.cfg" DESTINATION "." PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
     INSTALL(FILES "${OpenMW_BINARY_DIR}/openmw.cfg.install" DESTINATION "." RENAME "openmw.cfg" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
-    configure_file(${OpenMW_SOURCE_DIR}/files/plugins.cfg.local
-        "${OpenMW_BINARY_DIR}/plugins.cfg")
-    INSTALL(FILES "${OpenMW_BINARY_DIR}/plugins.cfg" DESTINATION "." PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
 
     #Install resources, launcher.qss and launcher.cfg
     INSTALL(DIRECTORY "${OpenMW_BINARY_DIR}/resources" DESTINATION "." FILE_PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "Resources")
     INSTALL(FILES "${OpenMW_BINARY_DIR}/launcher.qss" DESTINATION "./resources")
 	#Fallback like in launcher/CMakeLists.txt
     INSTALL(FILES "${OpenMW_BINARY_DIR}/launcher.qss" DESTINATION ".")
-    #INSTALL(FILES "${OpenMW_BINARY_DIR}/launcher.cfg" DESTINATION ".")
-
-	#INSTALL(FILES "${OGRE_PLUGIN_DIR}/RenderSystem_GL.so" DESTINATION "./Plugins/" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
-	#INSTALL(FILES "${OGRE_PLUGIN_DIR}/Plugin_OctreeSceneManager.so" DESTINATION "./Plugins/" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
-	#INSTALL(FILES "${OGRE_PLUGIN_DIR}/Plugin_ParticleFX.so" DESTINATION "./Plugins/" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
 
 	#TODO:This can be used with the next version - when FindOgre.cmake is updated
 	FOREACH(plugin ${USED_OGRE_PLUGINS})
