@@ -40,9 +40,9 @@ macro (find_tgz_deps)
 	#TODO: There are still many other libraries linked into the binaries or libraries which may not be present on all systems. What should we do with them? 
 	#TODO: Use find_package for libboost_date_time aswell - Ogre depends on it
     exec_program("dirname" ARGS ${Boost_FILESYSTEM_LIBRARY} OUTPUT_VARIABLE BOOSTDIR)
-    SET(Boost_DATE_TIME_LIBRARY ${BOOSTDIR}/libboost_date_time-mt.so)
+    SET(Boost_DATE_TIME_LIBRARY ${BOOSTDIR}/libboost_date_time.so)
 	#TODO Use find_package for libboost_wave aswell -- Shiny depends on it
-    SET(Boost_WAVE_LIBRARY ${BOOSTDIR}/libboost_wave-mt.so)
+    SET(Boost_WAVE_LIBRARY ${BOOSTDIR}/libboost_wave.so)
 
 	#FIXME: Item names do not correspond linked names. How can we find those?
 
