@@ -43,6 +43,7 @@ macro (find_tgz_deps)
     SET(Boost_DATE_TIME_LIBRARY ${BOOSTDIR}/libboost_date_time.so)
 	#TODO Use find_package for libboost_wave aswell -- Shiny depends on it
     SET(Boost_WAVE_LIBRARY ${BOOSTDIR}/libboost_wave.so)
+    SET(Boost_CHRONO_LIBRARY ${BOOSTDIR}/libboost_chrono.so)
 
 	#FIXME: Item names do not correspond linked names. How can we find those?
 
@@ -97,7 +98,7 @@ string(REGEX REPLACE "optimized(.*)/libOgreMain.sodebug.*" "\\1" OGRE_LIB_DIR ${
 
 	#Libs that are linked with the full version number
 	set(LIBITEMS ${Boost_DATE_TIME_LIBRARY} ${Boost_FILESYSTEM_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY} ${Boost_SYSTEM_LIBRARY} ${Boost_THREAD_LIBRARY} ${Boost_WAVE_LIBRARY}
-	${OIS_LIBRARY_REL} "${OGRE_LIB_DIR}/libOgreMain.so" "${OGRE_LIB_DIR}/libOgreTerrain.so" "${OGRE_LIB_DIR}/libOgrePaging.so")
+	${Boost_CHRONO_LIBRARY} ${OIS_LIBRARY_REL} "${OGRE_LIB_DIR}/libOgreMain.so" "${OGRE_LIB_DIR}/libOgreTerrain.so" "${OGRE_LIB_DIR}/libOgrePaging.so")
 	message("Libraries linked with full version:")
 foreach(CURRENT_ITEM ${LIBITEMS})
 	message("${CURRENT_ITEM}")
