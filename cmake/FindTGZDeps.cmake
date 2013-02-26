@@ -39,11 +39,22 @@ macro (find_tgz_deps)
 
 	#TODO: There are still many other libraries linked into the binaries or libraries which may not be present on all systems. What should we do with them? 
 	#TODO: Use find_package for libboost_date_time aswell - Ogre depends on it
-    exec_program("dirname" ARGS ${Boost_FILESYSTEM_LIBRARY} OUTPUT_VARIABLE BOOSTDIR)
-    SET(Boost_DATE_TIME_LIBRARY ${BOOSTDIR}/libboost_date_time.so)
-	#TODO Use find_package for libboost_wave aswell -- Shiny depends on it
-    SET(Boost_WAVE_LIBRARY ${BOOSTDIR}/libboost_wave.so)
-    SET(Boost_CHRONO_LIBRARY ${BOOSTDIR}/libboost_chrono.so)
+	exec_program("dirname" ARGS ${Boost_FILESYSTEM_LIBRARY} OUTPUT_VARIABLE BOOSTDIR)
+	
+	if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
+		### Didn't build boost debug libs yet. No idea if i should
+		SET(Boost_DATE_TIME_LIBRARY_DBG ${BOOSTDIR}/libboost_date_time.so)
+		#TODO Use find_package for libboost_wave aswell -- Shiny depends on it
+		SET(Boost_WAVE_LIBRARY_DBG ${BOOSTDIR}/libboost_wave.so)
+		#TODO Use find_package for libboost_chrono aswell -- libboost_wave depends on it
+		SET(Boost_CHRONO_LIBRARY_DBG ${BOOSTDIR}/libboost_chrono.so)
+	else()
+		SET(Boost_DATE_TIME_LIBRARY ${BOOSTDIR}/libboost_date_time.so)
+		#TODO Use find_package for libboost_wave aswell -- Shiny depends on it
+		SET(Boost_WAVE_LIBRARY ${BOOSTDIR}/libboost_wave.so)
+		#TODO Use find_package for libboost_chrono aswell -- libboost_wave depends on it
+		SET(Boost_CHRONO_LIBRARY ${BOOSTDIR}/libboost_chrono.so)
+	endif()	
 
 	#FIXME: Item names do not correspond linked names. How can we find those?
 
@@ -97,8 +108,13 @@ endforeach(CURRENT_ITEM)
 string(REGEX REPLACE "optimized(.*)/libOgreMain.sodebug.*" "\\1" OGRE_LIB_DIR ${OGRE_LIBRARIES})
 
 	#Libs that are linked with the full version number
-	set(LIBITEMS ${Boost_DATE_TIME_LIBRARY} ${Boost_FILESYSTEM_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY} ${Boost_SYSTEM_LIBRARY} ${Boost_THREAD_LIBRARY} ${Boost_WAVE_LIBRARY}
-	${Boost_CHRONO_LIBRARY} ${OIS_LIBRARY_REL} "${OGRE_LIB_DIR}/libOgreMain.so" "${OGRE_LIB_DIR}/libOgreTerrain.so" "${OGRE_LIB_DIR}/libOgrePaging.so")
+	if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
+		set(LIBITEMS ${Boost_DATE_TIME_LIBRARY_DBG} ${Boost_FILESYSTEM_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY} ${Boost_SYSTEM_LIBRARY} ${Boost_THREAD_LIBRARY} ${Boost_WAVE_LIBRARY_DBG}
+		${Boost_CHRONO_LIBRARY_DBG} ${OIS_LIBRARY_REL} "${OGRE_LIB_DIR}/libOgreMain_d.so" "${OGRE_LIB_DIR}/libOgreTerrain_d.so" "${OGRE_LIB_DIR}/libOgrePaging_d.so")
+	else()
+		set(LIBITEMS ${Boost_DATE_TIME_LIBRARY} ${Boost_FILESYSTEM_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY} ${Boost_SYSTEM_LIBRARY} ${Boost_THREAD_LIBRARY} ${Boost_WAVE_LIBRARY}
+		${Boost_CHRONO_LIBRARY} ${OIS_LIBRARY_REL} "${OGRE_LIB_DIR}/libOgreMain.so" "${OGRE_LIB_DIR}/libOgreTerrain.so" "${OGRE_LIB_DIR}/libOgrePaging.so")
+	endif()
 	message("Libraries linked with full version:")
 foreach(CURRENT_ITEM ${LIBITEMS})
 	message("${CURRENT_ITEM}")

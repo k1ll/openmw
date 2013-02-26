@@ -252,14 +252,24 @@ endif (MYGUI_STATIC)
 
 if (APPLE OR BUILD_TGZ)
     # List used Ogre plugins
-    SET(USED_OGRE_PLUGINS ${OGRE_RenderSystem_GL_LIBRARY_REL}
-                          ${OGRE_Plugin_ParticleFX_LIBRARY_REL})
+    if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
+        SET(USED_OGRE_PLUGINS ${OGRE_RenderSystem_GL_LIBRARY_DBG}
+                              ${OGRE_Plugin_ParticleFX_LIBRARY_DBG})
+    else()
+        SET(USED_OGRE_PLUGINS ${OGRE_RenderSystem_GL_LIBRARY_REL}
+                              ${OGRE_Plugin_ParticleFX_LIBRARY_REL})
+   endif()
 
     # Actually we must use OGRE_Plugin_CgProgramManager_FOUND but it's
     # not reliable and equals TRUE even if there's no Ogre Cg plugin
     if (Cg_FOUND)
+      if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
+        set(USED_OGRE_PLUGINS ${USED_OGRE_PLUGINS}
+                              ${OGRE_Plugin_CgProgramManager_LIBRARY_DBG})
+      else()
         set(USED_OGRE_PLUGINS ${USED_OGRE_PLUGINS}
                               ${OGRE_Plugin_CgProgramManager_LIBRARY_REL})
+      endif()
     endif ()
 
     if (${OGRE_PLUGIN_DIR_REL}})
@@ -298,8 +308,11 @@ endif()
 
 if(BUILD_TGZ)
 add_definitions(-DOGRE_PLUGIN_DIR_REL="./plugins")
-endif()
+add_definitions(-DOGRE_PLUGIN_DIR_DBG="./plugins")
+else()
+add_definitions(-DOGRE_PLUGIN_DIR_REL="${OGRE_PLUGIN_DIR_REL}")
 add_definitions(-DOGRE_PLUGIN_DIR_DBG="${OGRE_PLUGIN_DIR_DBG}")
+endif()
 
 if (APPLE AND OPENMW_OSX_DEPLOYMENT)
     # make it empty so plugin loading code can check this and try to find plugins inside app bundle
@@ -412,7 +425,11 @@ if(BUILD_TGZ)
         if(TGZ_NIGHTLY)
 	  SET(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${TGZ_DATE}-${KERNEL}${ARCH}")
         else()
-	  SET(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${KERNEL}${ARCH}")
+	  if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
+	    SET(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-debug-${CPACK_PACKAGE_VERSION}-${KERNEL}${ARCH}")
+	  else()
+	    SET(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${KERNEL}${ARCH}")
+	  endif()
         endif()
 	SET(CPACK_INCLUDE_TOPLEVEL_DIRECTORY 1)
 
