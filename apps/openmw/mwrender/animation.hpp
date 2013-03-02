@@ -1,60 +1,100 @@
 #ifndef _GAME_RENDER_ANIMATION_H
 #define _GAME_RENDER_ANIMATION_H
 
-#include <openengine/ogre/renderer.hpp>
-#include "../mwworld/actiontalk.hpp"
-#include <components/nif/node.hpp>
-#include <openengine/bullet/physic.hpp>
+#include <components/nifogre/ogre_nif_loader.hpp>
 
+#include "../mwworld/ptr.hpp"
 
+namespace MWMechanics
+{
+    class CharacterController;
+}
 
-namespace MWRender{
+namespace MWRender
+{
 
-struct PosAndRot{
-    Ogre::Quaternion vecRot;
-    Ogre::Vector3 vecPos;
-};
+class Animation
+{
+protected:
+    MWWorld::Ptr mPtr;
+    MWMechanics::CharacterController *mController;
 
-class Animation{
-
-   protected:
     Ogre::SceneNode* mInsert;
-    OEngine::Render::OgreRenderer &mRend;
-    std::map<Nif::NiSkinData::BoneInfoCopy*, PosAndRot> mVecRotPos;
-    static std::map<std::string, int> sUniqueIDs;
+    NifOgre::EntityList mEntityList;
+    std::map<std::string,NifOgre::TextKeyMap> mTextKeys;
+    Ogre::Node *mAccumRoot;
+    Ogre::Bone *mNonAccumRoot;
+    Ogre::Vector3 mAccumulate;
+    Ogre::Vector3 mLastPosition;
 
-    float mTime;
-    float mStartTime;
+    std::vector<Ogre::SkeletonPtr> mSkeletonSources;
+
+    NifOgre::TextKeyMap *mCurrentKeys;
+    NifOgre::TextKeyMap::const_iterator mNextKey;
+    Ogre::Animation *mCurrentAnim;
+    float mCurrentTime;
     float mStopTime;
-    int mAnimate;
-    //Represents a rotation index for each bone
-    std::vector<int>mRindexI;
-    //Represents a translation index for each bone
-    std::vector<int>mTindexI;
+    bool mPlaying;
+    bool mLooping;
 
-    //Only shapes with morphing data will use a shape number
-    int mShapeNumber;
-    std::vector<std::vector<int> > mShapeIndexI;
+    float mAnimVelocity;
+    float mAnimSpeedMult;
 
-    //Ogre::SkeletonInstance* skel;
-     std::vector<Nif::NiTriShapeCopy>* mShapes;          //All the NiTriShapeData for a creature
+    void calcAnimVelocity();
 
-    std::vector<Nif::NiKeyframeData>* mTransformations;
-    std::map<std::string,float>* mTextmappings;
-    Ogre::Entity* mBase;
-    void handleShapes(std::vector<Nif::NiTriShapeCopy>* allshapes, Ogre::Entity* creaturemodel, Ogre::SkeletonInstance *skel);
-    void handleAnimationTransforms();
-    bool timeIndex( float time, const std::vector<float> & times, int & i, int & j, float & x );
-    std::string getUniqueID(std::string mesh);
+    /* Applies the given animation to the given skeleton instance, using the specified time. */
+    void applyAnimation(const Ogre::Animation *anim, float time, Ogre::SkeletonInstance *skel);
 
-    public:
-        Animation(OEngine::Render::OgreRenderer& _rend);
-        virtual void runAnimation(float timepassed) = 0;
-        void startScript(std::string groupname, int mode, int loops);
-        void stopScript();
+    /* Updates a skeleton instance so that all bones matching the source skeleton (based on
+     * bone names) are positioned identically. */
+    void updateSkeletonInstance(const Ogre::SkeletonInstance *skelsrc, Ogre::SkeletonInstance *skel);
 
-        virtual ~Animation();
+    /* Updates the animation to the specified time, and returns the movement
+     * vector since the last update or reset. */
+    Ogre::Vector3 updatePosition(float time);
 
+    /* Resets the animation to the time of the specified start marker, without
+     * moving anything, and set the end time to the specified stop marker. If
+     * the marker is not found, it resets to the beginning or end respectively.
+     */
+    void reset(const std::string &start, const std::string &stop);
+
+    bool handleEvent(float time, const std::string &evt);
+
+    /* Specifies a list of skeleton names to use as animation sources. */
+    void setAnimationSources(const std::vector<std::string> &names);
+
+    /* Specifies a single skeleton name to use as an animation source. */
+    void setAnimationSource(const std::string &name)
+    {
+        std::vector<std::string> names(1, name);
+        setAnimationSources(names);
+    }
+
+    void createEntityList(Ogre::SceneNode *node, const std::string &model);
+
+public:
+    Animation(const MWWorld::Ptr &ptr);
+    virtual ~Animation();
+
+    void setController(MWMechanics::CharacterController *controller);
+
+    void updatePtr(const MWWorld::Ptr &ptr);
+
+    bool hasAnimation(const std::string &anim);
+
+    // Specifies the axis' to accumulate on. Non-accumulated axis will just
+    // move visually, but not affect the actual movement. Each x/y/z value
+    // should be on the scale of 0 to 1.
+    void setAccumulation(const Ogre::Vector3 &accum);
+
+    void setSpeed(float speed);
+
+    void setLooping(bool loop);
+
+    void play(const std::string &groupname, const std::string &start, const std::string &stop, bool loop);
+    virtual Ogre::Vector3 runAnimation(float timepassed);
 };
+
 }
 #endif

@@ -3,7 +3,7 @@
 
 #include "../mwrender/renderingmanager.hpp"
 
-#include "physicssystem.hpp"
+#include "ptr.hpp"
 #include "globals.hpp"
 
 namespace Ogre
@@ -34,9 +34,9 @@ namespace MWRender
 
 namespace MWWorld
 {
+    class PhysicsSystem;
     class Player;
     class CellStore;
-    class Ptr;
 
     class Scene
     {
@@ -88,17 +88,15 @@ namespace MWWorld
 
             void insertCell (Ptr::CellStore &cell);
 
-            /// this method is only meant for dropping objects into the gameworld from a container
-            /// and thus only handles object types that can be placed in a container
-            void insertObject (const Ptr& object, CellStore* cell);
-
-            void update (float duration);
+            void update (float duration, bool paused);
 
             void addObjectToScene (const Ptr& ptr);
             ///< Add an object that already exists in the world model to the scene.
 
             void removeObjectFromScene (const Ptr& ptr);
             ///< Remove an object from the scene, but not from the world model.
+
+            bool isCellActive(const CellStore &cell);
     };
 }
 

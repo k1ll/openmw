@@ -46,7 +46,7 @@ namespace MWRender{
 
         RenderingManager* mRendering;
 
-        Ogre::TerrainMaterialGeneratorB::SM2Profile* mActiveProfile;
+        TerrainMaterial::Profile* mActiveProfile;
 
         /**
          * The length in verticies of a single terrain block.
@@ -75,7 +75,7 @@ namespace MWRender{
         void initTerrainTextures(Ogre::Terrain::ImportData* terrainData,
                                  int cellX, int cellY,
                                  int fromX, int fromY, int size,
-                                 std::map<uint16_t, int>& indexes);
+                                 std::map<uint16_t, int>& indexes, size_t plugin);
 
         /**
          * Creates the blend (splatting maps) for the given terrain from the ltex data.

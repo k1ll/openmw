@@ -8,21 +8,16 @@
 
 namespace MWScript
 {
-    struct Locals
+    class Locals
     {
-        std::vector<Interpreter::Type_Short> mShorts;
-        std::vector<Interpreter::Type_Integer> mLongs;
-        std::vector<Interpreter::Type_Float> mFloats;
+        public:
+            std::vector<Interpreter::Type_Short> mShorts;
+            std::vector<Interpreter::Type_Integer> mLongs;
+            std::vector<Interpreter::Type_Float> mFloats;
+            
+            void configure (const ESM::Script& script);
+            bool setVarByInt(const std::string& script, const std::string& var, int val);
         
-        void configure (const ESM::Script& script)
-        {
-            mShorts.clear();
-            mShorts.resize (script.data.numShorts, 0);
-            mLongs.clear();
-            mLongs.resize (script.data.numLongs, 0);
-            mFloats.clear();
-            mFloats.resize (script.data.numFloats, 0);
-        }
     };
 }
 

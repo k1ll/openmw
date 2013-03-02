@@ -1,25 +1,3 @@
-/**
- *  Open Morrowind - an opensource Elder Scrolls III: Morrowind
- *  engine implementation.
- *
- *  Copyright (C) 2011 Open Morrowind Team
- *
- *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-
-/** \file components/files/windowspath.hpp */
-
 #ifndef COMPONENTS_FILES_WINDOWSPATH_HPP
 #define COMPONENTS_FILES_WINDOWSPATH_HPP
 
@@ -38,6 +16,13 @@ namespace Files
  */
 struct WindowsPath
 {
+    /**
+     * \brief WindowsPath constructor.
+     *
+     * \param [in] application_name - The name of the application.
+     */
+    WindowsPath(const std::string& application_name);
+
     /**
      * \brief Returns user path i.e.:
      * "X:\Documents And Settings\<User name>\My Documents\My Games\"
@@ -62,6 +47,13 @@ struct WindowsPath
     boost::filesystem::path getLocalPath() const;
 
     /**
+     * \brief
+     *
+     * \return boost::filesystem::path
+     */
+    boost::filesystem::path getCachePath() const;
+
+    /**
      * \brief Return same path like getGlobalPath
      *
      * \return boost::filesystem::path
@@ -74,6 +66,8 @@ struct WindowsPath
      * \return boost::filesystem::path
      */
     boost::filesystem::path getInstallPath() const;
+
+    std::string mName;
 };
 
 } /* namespace Files */

@@ -26,144 +26,67 @@
 
 #include <OgreResource.h>
 #include <OgreMesh.h>
+#include <OgreSkeleton.h>
 
-#include <cassert>
-#include <boost/algorithm/string.hpp>
+#include <vector>
+#include <string>
 
-#include "../nif/node.hpp"
 
-#include <libs/platform/strings.h>
-
-class BoundsFinder;
-
-struct ciLessBoost : std::binary_function<std::string, std::string, bool>
-{
-    bool operator() (const std::string & s1, const std::string & s2) const
-    {
-        //case insensitive version of is_less
-        return boost::algorithm::lexicographical_compare(s1, s2, boost::algorithm::is_iless());
-    }
-};
-
-namespace Nif
-{
-    class Node;
-    class Transformation;
-    class NiTriShape;
-}
-
+// FIXME: This namespace really doesn't do anything Nif-specific. Any supportable
+// model format should go through this.
 namespace NifOgre
 {
 
+typedef std::multimap<float,std::string> TextKeyMap;
+static const char sTextKeyExtraDataID[] = "TextKeyExtraData";
+struct EntityList {
+    std::vector<Ogre::Entity*> mEntities;
+    Ogre::Entity *mSkelBase;
 
-/** Manual resource loader for NIF meshes. This is the main class
-    responsible for translating the internal NIF mesh structure into
-    something Ogre can use. Later it will also handle the insertion of
-    collision meshes into Bullet / OgreBullet.
-
-    You have to insert meshes manually into Ogre like this:
-
-    NIFLoader::load("somemesh.nif");
-
-    Afterwards, you can use the mesh name "somemesh.nif" normally to
-    create entities and so on. The mesh isn't loaded from disk until
-    OGRE needs it for rendering. Thus the above load() command is not
-    very resource intensive, and can safely be done for a large number
-    of meshes at load time.
- */
-class NIFLoader : Ogre::ManualResourceLoader
-{
-    public:
-        static int numberOfMeshes;
-        static NIFLoader& getSingleton();
-        static NIFLoader* getSingletonPtr();
-
-        virtual void loadResource(Ogre::Resource *resource);
-
-        static Ogre::MeshPtr load(const std::string &name,
-                                    const std::string &group="General");
-        //void insertMeshInsideBase(Ogre::Mesh* mesh);
-        std::vector<Nif::NiKeyframeData>* getAnim(std::string name);
-        std::vector<Nif::NiTriShapeCopy>* getShapes(std::string name);
-        std::map<std::string, float>* getTextIndices(std::string name);
-
-
-        void setOutputAnimFiles(bool output);
-        void setVerbosePath(std::string path);
-
-    private:
-
-        NIFLoader() : resourceName(""), resourceGroup("General"),  flip(false), mNormaliseNormals(false),
-          mFlipVertexWinding(false), mOutputAnimFiles(false), inTheSkeletonTree(false)  {}
-        NIFLoader(NIFLoader& n) {}
-
-        void calculateTransform();
-
-
-        void warn(std::string msg);
-        void fail(std::string msg);
-
-        void handleNode( Nif::Node *node, int flags,
-                        const Nif::Transformation *trafo, BoundsFinder &bounds, Ogre::Bone *parentBone, std::vector<std::string> boneSequence);
-
-        void handleNiTriShape(Nif::NiTriShape *shape, int flags, BoundsFinder &bounds, Nif::Transformation original, std::vector<std::string> boneSequence);
-
-        void createOgreSubMesh(Nif::NiTriShape *shape, const Ogre::String &material, std::list<Ogre::VertexBoneAssignment> &vertexBoneAssignments);
-
-        void createMaterial(const Ogre::String &name,
-                            const Ogre::Vector3 &ambient,
-                            const Ogre::Vector3 &diffuse,
-                            const Ogre::Vector3 &specular,
-                            const Ogre::Vector3 &emissive,
-                            float glossiness, float alpha,
-                            int alphaFlags, float alphaTest,
-                            const Ogre::String &texName);
-
-        void findRealTexture(Ogre::String &texName);
-
-        Ogre::String getUniqueName(const Ogre::String &input);
-
-        //returns the skeleton name of this mesh
-        std::string getSkeletonName()
-        {
-            return resourceName + ".skel";
-        }
-
-        std::string verbosePath;
-        std::string resourceName;
-        std::string resourceGroup;
-        Ogre::Matrix4 mTransform;
-        Ogre::AxisAlignedBox mBoundingBox;
-        bool flip;
-        bool mNormaliseNormals;
-        bool mFlipVertexWinding;
-        bool bNiTri;
-        bool mOutputAnimFiles;
-        std::multimap<std::string,std::string> MaterialMap;
-
-        // pointer to the ogre mesh which is currently build
-        Ogre::Mesh *mesh;
-        Ogre::SkeletonPtr mSkel;
-        Ogre::Vector3 vector;
-        std::vector<Nif::NiTriShapeCopy> shapes;
-        std::string name;
-        std::string triname;
-        std::vector<Nif::NiKeyframeData> allanim;
-
-		std::map<std::string,float> textmappings;
-		std::map<std::string,std::map<std::string,float>,ciLessBoost> alltextmappings;
-		std::map<std::string,std::vector<Nif::NiKeyframeData>,ciLessBoost> allanimmap;
-		std::map<std::string,std::vector<Nif::NiTriShapeCopy>,ciLessBoost> allshapesmap;
-        std::vector<Nif::NiKeyframeData> mAnim;
-		std::vector<Nif::NiTriShapeCopy> mS;
-        std::vector<Ogre::SubMesh*> needBoneAssignments;
-        bool inTheSkeletonTree;
-
-
+    EntityList() : mSkelBase(0)
+    { }
 };
+
+
+/* This holds a list of mesh names, the names of their parent nodes, and the offset
+ * from their parent nodes. */
+struct MeshInfo {
+    std::string mMeshName;
+    std::string mTargetNode;
+
+    MeshInfo(const std::string &name, const std::string &target)
+      : mMeshName(name), mTargetNode(target)
+    { }
+};
+typedef std::vector<MeshInfo> MeshInfoList;
+
+class Loader
+{
+    static MeshInfoList load(const std::string &name, const std::string &group);
+
+public:
+    static EntityList createEntities(Ogre::Entity *parent, const std::string &bonename,
+                                     Ogre::SceneNode *parentNode,
+                                     std::string name,
+                                     const std::string &group="General");
+
+    static EntityList createEntities(Ogre::SceneNode *parentNode,
+                                     std::string name,
+                                     const std::string &group="General");
+
+    static Ogre::SkeletonPtr getSkeleton(std::string name, const std::string &group="General");
+};
+
+}
+
+namespace std
+{
+
+// These operators allow extra data types to be stored in an Ogre::Any
+// object, which can then be stored in user object bindings on the nodes
+
+ostream& operator<<(ostream &o, const NifOgre::TextKeyMap&);
 
 }
 
 #endif
-
-

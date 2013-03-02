@@ -3,8 +3,9 @@
 #include <OgreTerrain.h>
 #include <OgreTerrainGroup.h>
 #include <OgreHardwarePixelBuffer.h>
+#include <OgreRoot.h>
 
-#include <components/esm_store/store.hpp>
+#include "../mwworld/esmstore.hpp"
 
 #include <components/settings/settings.hpp>
 
@@ -25,25 +26,25 @@ namespace MWRender
     //----------------------------------------------------------------------------------------------
 
     TerrainManager::TerrainManager(Ogre::SceneManager* mgr, RenderingManager* rend) :
-         mTerrainGroup(TerrainGroup(mgr, Terrain::ALIGN_X_Z, mLandSize, mWorldSize)), mRendering(rend)
+         mTerrainGroup(TerrainGroup(mgr, Terrain::ALIGN_X_Y, mLandSize, mWorldSize)), mRendering(rend)
     {
         mTerrainGlobals = OGRE_NEW TerrainGlobalOptions();
+
         TerrainMaterialGeneratorPtr matGen;
-        TerrainMaterialGeneratorB* matGenP = new TerrainMaterialGeneratorB();
+        TerrainMaterial* matGenP = new TerrainMaterial();
         matGen.bind(matGenP);
         mTerrainGlobals->setDefaultMaterialGenerator(matGen);
 
         TerrainMaterialGenerator::Profile* const activeProfile =
             mTerrainGlobals->getDefaultMaterialGenerator()
                            ->getActiveProfile();
-        mActiveProfile = static_cast<TerrainMaterialGeneratorB::SM2Profile*>(activeProfile);
+        mActiveProfile = static_cast<TerrainMaterial::Profile*>(activeProfile);
 
         //The pixel error should be as high as possible without it being noticed
         //as it governs how fast mesh quality decreases.
         mTerrainGlobals->setMaxPixelError(8);
 
         mTerrainGlobals->setLayerBlendMapSize(32);
-        mTerrainGlobals->setDefaultGlobalColourMapSize(65);
 
         //10 (default) didn't seem to be quite enough
         mTerrainGlobals->setSkirtSize(128);
@@ -52,29 +53,9 @@ namespace MWRender
         //this seemed the distance where it wasn't too noticeable
         mTerrainGlobals->setCompositeMapDistance(mWorldSize*2);
 
-        mActiveProfile->setLightmapEnabled(false);
-        mActiveProfile->setLayerSpecularMappingEnabled(false);
-        mActiveProfile->setLayerNormalMappingEnabled(false);
-        mActiveProfile->setLayerParallaxMappingEnabled(false);
-
-        bool shadows = Settings::Manager::getBool("enabled", "Shadows");
-        mActiveProfile->setReceiveDynamicShadowsEnabled(shadows);
-        mActiveProfile->setReceiveDynamicShadowsDepth(shadows);
-        if (Settings::Manager::getBool("split", "Shadows"))
-            mActiveProfile->setReceiveDynamicShadowsPSSM(mRendering->getShadows()->getPSSMSetup());
-        else
-            mActiveProfile->setReceiveDynamicShadowsPSSM(0);
-
-        mActiveProfile->setShadowFar(mRendering->getShadows()->getShadowFar());
-        mActiveProfile->setShadowFadeStart(mRendering->getShadows()->getFadeStart());
-
-        //composite maps lead to a drastic increase in loading time so are
-        //disabled
-        mActiveProfile->setCompositeMapEnabled(false);
-
         mTerrainGroup.setOrigin(Vector3(mWorldSize/2,
-                                         0,
-                                         -mWorldSize/2));
+                                         mWorldSize/2,
+                                         0));
 
         Terrain::ImportData& importSettings = mTerrainGroup.getDefaultImportSettings();
 
@@ -112,16 +93,18 @@ namespace MWRender
 
     void TerrainManager::cellAdded(MWWorld::Ptr::CellStore *store)
     {
-        const int cellX = store->cell->getGridX();
-        const int cellY = store->cell->getGridY();
+        const int cellX = store->mCell->getGridX();
+        const int cellY = store->mCell->getGridY();
 
-        ESM::Land* land = MWBase::Environment::get().getWorld()->getStore().lands.search(cellX, cellY);
+        ESM::Land* land =
+            MWBase::Environment::get().getWorld()->getStore().get<ESM::Land>().search(cellX, cellY);
         if (land == NULL) // no land data means we're not going to create any terrain.
             return;
 
-        if (!land->dataLoaded)
+        int dataRequired = ESM::Land::DATA_VHGT | ESM::Land::DATA_VCLR;
+        if (!land->isDataLoaded(dataRequired))
         {
-            land->loadData();
+            land->loadData(dataRequired);
         }
 
         //split the cell terrain into four segments
@@ -154,14 +137,14 @@ namespace MWRender
                     const size_t xOffset = x * (mLandSize-1);
 
                     memcpy(&terrainData.inputFloat[terrainCopyY*mLandSize],
-                           &land->landData->heights[yOffset + xOffset],
+                           &land->mLandData->mHeights[yOffset + xOffset],
                            mLandSize*sizeof(float));
                 }
 
                 std::map<uint16_t, int> indexes;
                 initTerrainTextures(&terrainData, cellX, cellY,
                                     x * numTextures, y * numTextures,
-                                    numTextures, indexes);
+                                    numTextures, indexes, land->mPlugin);
 
                 if (mTerrainGroup.getTerrain(terrainX, terrainY) == NULL)
                 {
@@ -178,25 +161,32 @@ namespace MWRender
                     terrain->setVisibilityFlags(RV_Terrain);
                     terrain->setRenderQueueGroup(RQG_Main);
 
-                    if ( land->landData->usingColours )
+                    // disable or enable global colour map (depends on available vertex colours)
+                    if ( land->mLandData->mUsingColours )
                     {
-                        // disable or enable global colour map (depends on available vertex colours)
-                        mActiveProfile->setGlobalColourMapEnabled(true);
                         TexturePtr vertex = getVertexColours(land,
                                                              cellX, cellY,
                                                              x*(mLandSize-1),
                                                              y*(mLandSize-1),
                                                              mLandSize);
 
-                        //this is a hack to get around the fact that Ogre seems to
-                        //corrupt the global colour map leading to rendering errors
-                        MaterialPtr mat = terrain->getMaterial();
-                        mat->getTechnique(0)->getPass(0)->getTextureUnitState(1)->setTextureName( vertex->getName() );
-                        //mat = terrain->_getCompositeMapMaterial();
-                        //mat->getTechnique(0)->getPass(0)->getTextureUnitState(1)->setTextureName( vertex->getName() );
+                        mActiveProfile->setGlobalColourMapEnabled(true);
+                        mActiveProfile->setGlobalColourMap (terrain, vertex->getName());
                     }
+                    else
+                        mActiveProfile->setGlobalColourMapEnabled (false);
                 }
             }
+        }
+
+        // when loading from a heightmap, Ogre::Terrain does not update the derived data (normal map, LOD)
+        // synchronously, even if we supply synchronous = true parameter to loadTerrain.
+        // the following to be the only way to make sure derived data is ready when rendering the next frame.
+        while (mTerrainGroup.isDerivedDataUpdateInProgress())
+        {
+           // we need to wait for this to finish
+           OGRE_THREAD_SLEEP(5);
+           Root::getSingleton().getWorkQueue()->processResponses();
         }
 
         mTerrainGroup.freeTemporaryResources();
@@ -210,8 +200,8 @@ namespace MWRender
         {
             for ( int y = 0; y < 2; y++ )
             {
-                int terrainX = store->cell->getGridX() * 2 + x;
-                int terrainY = store->cell->getGridY() * 2 + y;
+                int terrainX = store->mCell->getGridX() * 2 + x;
+                int terrainY = store->mCell->getGridY() * 2 + y;
                 if (mTerrainGroup.getTerrain(terrainX, terrainY) != NULL)
                     mTerrainGroup.unloadTerrain(terrainX, terrainY);
             }
@@ -223,8 +213,13 @@ namespace MWRender
     void TerrainManager::initTerrainTextures(Terrain::ImportData* terrainData,
                                              int cellX, int cellY,
                                              int fromX, int fromY, int size,
-                                             std::map<uint16_t, int>& indexes)
+                                             std::map<uint16_t, int>& indexes, size_t plugin)
     {
+        // FIXME: In a multiple esm configuration, we have multiple palettes. Since this code
+        //  crosses cell boundaries, we no longer have a unique terrain palette. Instead, we need
+        //  to adopt the following code for a dynamic palette. And this is evil - the current design
+        //  does not work well for this task...
+
         assert(terrainData != NULL && "Must have valid terrain data");
         assert(fromX >= 0 && fromY >= 0 &&
                "Can't get a terrain texture on terrain outside the current cell");
@@ -237,12 +232,20 @@ namespace MWRender
         //
         //If we don't sort the ltex indexes, the splatting order may differ between
         //cells which may lead to inconsistent results when shading between cells
+        int num = MWBase::Environment::get().getWorld()->getStore().get<ESM::LandTexture>().getSize(plugin);
         std::set<uint16_t> ltexIndexes;
         for ( int y = fromY - 1; y < fromY + size + 1; y++ )
         {
             for ( int x = fromX - 1; x < fromX + size + 1; x++ )
             {
-                ltexIndexes.insert(getLtexIndexAt(cellX, cellY, x, y));
+                int idx = getLtexIndexAt(cellX, cellY, x, y);
+                // This is a quick hack to prevent the program from trying to fetch textures
+                //  from a neighboring cell, which might originate from a different plugin,
+                //  and use a separate texture palette. Right now, we simply cast it to the
+                //  default texture (i.e. 0).
+                if (idx > num)
+                  idx = 0;
+                ltexIndexes.insert(idx);
             }
         }
 
@@ -254,7 +257,7 @@ namespace MWRender
               iter != ltexIndexes.end();
               ++iter )
         {
-            const uint16_t ltexIndex = *iter;
+            uint16_t ltexIndex = *iter;
             //this is the base texture, so we can ignore this at present
             if ( ltexIndex == baseTexture )
             {
@@ -267,8 +270,14 @@ namespace MWRender
             {
                 //NB: All vtex ids are +1 compared to the ltex ids
 
-                assert( (int)MWBase::Environment::get().getWorld()->getStore().landTexts.getSize() >= (int)ltexIndex - 1 &&
-                       "LAND.VTEX must be within the bounds of the LTEX array");
+                const MWWorld::Store<ESM::LandTexture> &ltexStore =
+                    MWBase::Environment::get().getWorld()->getStore().get<ESM::LandTexture>();
+
+                // NOTE: using the quick hack above, we should no longer end up with textures indices
+                //  that are out of bounds. However, I haven't updated the test to a multi-palette
+                //  system yet. We probably need more work here, so we skip it for now.
+                //assert( (int)ltexStore.getSize() >= (int)ltexIndex - 1 &&
+                       //"LAND.VTEX must be within the bounds of the LTEX array");
 
                 std::string texture;
                 if ( ltexIndex == 0 )
@@ -277,7 +286,7 @@ namespace MWRender
                 }
                 else
                 {
-                    texture = MWBase::Environment::get().getWorld()->getStore().landTexts.search(ltexIndex-1)->texture;
+                    texture = ltexStore.search(ltexIndex-1, plugin)->mTexture;
                     //TODO this is needed due to MWs messed up texture handling
                     texture = texture.substr(0, texture.rfind(".")) + ".dds";
                 }
@@ -433,16 +442,17 @@ namespace MWRender
         }
 
 
-        ESM::Land* land = MWBase::Environment::get().getWorld()->getStore().lands.search(cellX, cellY);
+        ESM::Land* land =
+            MWBase::Environment::get().getWorld()->getStore().get<ESM::Land>().search(cellX, cellY);
         if ( land != NULL )
         {
-            if (!land->dataLoaded)
+            if (!land->isDataLoaded(ESM::Land::DATA_VTEX))
             {
-                land->loadData();
+                land->loadData(ESM::Land::DATA_VTEX);
             }
 
-            return land->landData
-                       ->textures[y * ESM::Land::LAND_TEXTURE_SIZE + x];
+            return land->mLandData
+                       ->mTextures[y * ESM::Land::LAND_TEXTURE_SIZE + x];
         }
         else
         {
@@ -486,7 +496,7 @@ namespace MWRender
 
         if ( land != NULL )
         {
-            const char* const colours = land->landData->colours;
+            const char* const colours = land->mLandData->mColours;
             for ( int y = 0; y < size; y++ )
             {
                 for ( int x = 0; x < size; x++ )

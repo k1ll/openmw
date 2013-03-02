@@ -9,13 +9,14 @@
 #include "BulletShapeLoader.h"
 #include "BulletCollision/CollisionShapes/btScaledBvhTriangleMeshShape.h"
 
+
+
 class btRigidBody;
 class btBroadphaseInterface;
 class btDefaultCollisionConfiguration;
 class btSequentialImpulseConstraintSolver;
 class btCollisionDispatcher;
 class btDiscreteDynamicsWorld;
-class btKinematicCharacterController;
 class btHeightfieldTerrainShape;
 
 namespace BtOgre
@@ -23,16 +24,24 @@ namespace BtOgre
     class DebugDrawer;
 }
 
+namespace Ogre
+{
+    class SceneManager;
+}
+
 namespace MWWorld
 {
     class World;
 }
+
 
 namespace OEngine {
 namespace Physic
 {
     class CMotionState;
     struct PhysicEvent;
+    class PhysicEngine;
+    class RigidBody;
 
     /**
     *This is just used to be able to name objects.
@@ -50,55 +59,88 @@ namespace Physic
     };
 
     /**
-     * A physic Actor use a modifed KinematicCharacterController taken in the bullet forum.
+     * A physic actor uses a rigid body based on box shapes.
+     * Pmove is used to move the physic actor around the dynamic world.
      */
     class PhysicActor
     {
     public:
-        PhysicActor(std::string name);
+        PhysicActor(const std::string &name, const std::string &mesh, PhysicEngine *engine, const Ogre::Vector3 &position, const Ogre::Quaternion &rotation, float scale);
 
         ~PhysicActor();
 
+        void setPosition(const Ogre::Vector3 &pos);
+
         /**
-         * This function set the walkDirection. This is not relative to the actor orientation.
-         * I think it's also needed to take time into account. A typical call should look like this:
-         * setWalkDirection( mvt * orientation * dt)
+         * This adjusts the rotation of a PhysicActor
+         * If we have any problems with this (getting stuck in pmove) we should change it 
+         * from setting the visual orientation to setting the orientation of the rigid body directly.
          */
-        void setWalkDirection(const btVector3& mvt);
-
-        void Rotate(const btQuaternion& quat);
-
-        void setRotation(const btQuaternion& quat);
-
-        void setGravity(float gravity);
-
-        void setVerticalVelocity(float z);
+        void setRotation(const Ogre::Quaternion &quat);
 
         void enableCollisions(bool collision);
 
-        bool getCollisionMode();
+        bool getCollisionMode() const
+        {
+            return collisionMode;
+        }
 
-        btVector3 getPosition(void);
-
-        btQuaternion getRotation(void);
-
-        void setPosition(const btVector3& pos);
-
-        btKinematicCharacterController* mCharacter;
-
-        PairCachingGhostObject* internalGhostObject;
-        btCollisionShape* internalCollisionShape;
-
-        PairCachingGhostObject* externalGhostObject;
-        btCollisionShape* externalCollisionShape;
-
-        std::string mName;
 
         /**
-        *NPC scenenode is located on there feet, and you can't simply translate a btShape, so this vector is used
-        *each time get/setposition is called.
-        */
-        btVector3 mTranslation;
+         * This returns the visual position of the PhysicActor (used to position a scenenode).
+         * Note - this is different from the position of the contained mBody.
+         */
+        Ogre::Vector3 getPosition();
+
+        /**
+         * Returns the visual orientation of the PhysicActor
+         */
+        Ogre::Quaternion getRotation();
+
+        /**
+         * Sets the scale of the PhysicActor
+         */
+        void setScale(float scale);
+
+        /**
+         * Returns the half extents for this PhysiActor
+         */
+        Ogre::Vector3 getHalfExtents() const;
+
+        /**
+         * Sets the current amount of vertical force (gravity) affecting this physic actor
+         */
+        void setVerticalForce(float force);
+
+        /**
+         * Gets the current amount of vertical force (gravity) affecting this physic actor
+         */
+        float getVerticalForce() const;
+
+        void setOnGround(bool grounded);
+
+        bool getOnGround() const;
+
+//HACK: in Visual Studio 2010 and presumably above, this structures alignment
+//		must be 16, but the built in operator new & delete don't properly
+//		perform this alignment.
+#if _MSC_VER >= 1600
+		void * operator new (size_t Size) { return _aligned_malloc (Size, 16); }
+		void operator delete (void * Data) { _aligned_free (Data); }
+#endif
+
+    private:
+        
+        OEngine::Physic::RigidBody* mBody;
+        Ogre::Vector3 mBoxScaledTranslation;
+        btQuaternion mBoxRotationInverse;
+        Ogre::Quaternion mBoxRotation;
+        float verticalForce;
+        bool onGround;
+        bool collisionMode;
+        std::string mMesh;
+        PhysicEngine* mEngine;
+        std::string mName;
     };
 
     /**
@@ -114,7 +156,8 @@ namespace Physic
         std::string mName;
 
         //is this body used for raycasting only?
-        bool collide;
+        bool mCollide;
+        bool mIgnore;
     };
 
     struct HeightField
@@ -143,11 +186,24 @@ namespace Physic
         ~PhysicEngine();
 
         /**
-         * Create a RigidBody.It does not add it to the simulation, but it does add it to the rigidBody Map,
-         * so you can get it with the getRigidBody function.
+         * Creates a RigidBody.  It does not add it to the simulation.
+         * After created, the body is set to the correct rotation, position, and scale
          */
-        RigidBody* createRigidBody(std::string mesh,std::string name,float scale);
+        RigidBody* createAndAdjustRigidBody(const std::string &mesh, const std::string &name,
+            float scale, const Ogre::Vector3 &position, const Ogre::Quaternion &rotation,
+            Ogre::Vector3* scaledBoxTranslation = 0, Ogre::Quaternion* boxRotation = 0);
 
+        /**
+         * Adjusts a rigid body to the right position and rotation
+         */
+
+        void adjustRigidBody(RigidBody* body, const Ogre::Vector3 &position, const Ogre::Quaternion &rotation,
+            const Ogre::Vector3 &scaledBoxTranslation = Ogre::Vector3::ZERO,
+            const Ogre::Quaternion &boxRotation = Ogre::Quaternion::IDENTITY);
+        /**
+         Mainly used to (but not limited to) adjust rigid bodies based on box shapes to the right position and rotation.
+         */
+        void boxAdjustExternal(const std::string &mesh, RigidBody* body, float scale, const Ogre::Vector3 &position, const Ogre::Quaternion &rotation);
         /**
          * Add a HeightField to the simulation
          */
@@ -163,39 +219,40 @@ namespace Physic
         /**
          * Add a RigidBody to the simulation
          */
-        void addRigidBody(RigidBody* body);
+        void addRigidBody(RigidBody* body, bool addToMap = true);
 
         /**
          * Remove a RigidBody from the simulation. It does not delete it, and does not remove it from the RigidBodyMap.
          */
-        void removeRigidBody(std::string name);
+        void removeRigidBody(const std::string &name);
 
         /**
          * Delete a RigidBody, and remove it from RigidBodyMap.
          */
-        void deleteRigidBody(std::string name);
+        void deleteRigidBody(const std::string &name);
 
         /**
          * Return a pointer to a given rigid body.
          * TODO:check if exist
          */
-        RigidBody* getRigidBody(std::string name);
+        RigidBody* getRigidBody(const std::string &name);
 
         /**
          * Create and add a character to the scene, and add it to the ActorMap.
          */
-        void addCharacter(std::string name);
+        void addCharacter(const std::string &name, const std::string &mesh,
+        const Ogre::Vector3 &position, float scale, const Ogre::Quaternion &rotation);
 
         /**
          * Remove a character from the scene. TODO:delete it! for now, a small memory leak^^ done?
          */
-        void removeCharacter(std::string name);
+        void removeCharacter(const std::string &name);
 
         /**
          * Return a pointer to a character
          * TODO:check if the actor exist...
          */
-        PhysicActor* getCharacter(std::string name);
+        PhysicActor* getCharacter(const std::string &name);
 
         /**
          * This step the simulation of a given time.
@@ -220,6 +277,10 @@ namespace Physic
         void setDebugRenderingMode(int mode);
 
         bool toggleDebugRendering();
+
+        void getObjectAABB(const std::string &mesh, float scale, btVector3 &min, btVector3 &max);
+
+        void setSceneManager(Ogre::SceneManager* sceneMgr);
 
         /**
          * Return the closest object hit by a ray. If there are no objects, it will return ("",-1).
@@ -252,10 +313,12 @@ namespace Physic
         HeightFieldContainer mHeightFieldMap;
 
         typedef std::map<std::string,RigidBody*> RigidBodyContainer;
-        RigidBodyContainer RigidBodyMap;
+        RigidBodyContainer ObjectMap;
 
         typedef std::map<std::string, PhysicActor*>  PhysicActorContainer;
         PhysicActorContainer PhysicActorMap;
+
+        Ogre::SceneManager* mSceneMgr;
 
         //debug rendering
         BtOgre::DebugDrawer* mDebugDrawer;

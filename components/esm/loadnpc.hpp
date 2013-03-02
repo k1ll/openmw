@@ -1,11 +1,18 @@
-#ifndef _ESM_NPC_H
-#define _ESM_NPC_H
+#ifndef OPENMW_ESM_NPC_H
+#define OPENMW_ESM_NPC_H
 
-#include "esm_reader.hpp"
-#include "loadcont.hpp"
+#include <string>
+#include <vector>
+
 #include "defs.hpp"
+#include "loadcont.hpp"
+#include "aipackage.hpp"
+#include "spelllist.hpp"
 
 namespace ESM {
+
+class ESMReader;
+class ESMWriter;
 
 /*
  * NPC definition
@@ -18,16 +25,16 @@ struct NPC
     {
       // This merchant buys:
       Weapon        = 0x00001,
-      Armor     = 0x00002,
+      Armor         = 0x00002,
       Clothing      = 0x00004,
-      Books     = 0x00008,
+      Books         = 0x00008,
       Ingredients   = 0x00010,
-      Picks     = 0x00020,
+      Picks         = 0x00020,
       Probes        = 0x00040,
       Lights        = 0x00080,
       Apparatus     = 0x00100,
       RepairItem    = 0x00200,
-      Misc      = 0x00400,
+      Misc          = 0x00400,
 
       // Other services
       Spells        = 0x00800,
@@ -46,61 +53,81 @@ struct NPC
       Respawn   = 0x0004,
       Autocalc  = 0x0008,
       Skeleton  = 0x0400, // Skeleton blood effect (white)
-      Metal = 0x0800  // Metal blood effect (golden?)
+      Metal     = 0x0800  // Metal blood effect (golden?)
     };
 
-#pragma pack(push)
-#pragma pack(1)
-  struct NPDTstruct52
-  {
-    short level;
-    char strength, intelligence, willpower, agility,
-      speed, endurance, personality, luck;
-    char skills[27];
-    char reputation;
-    short health, mana, fatigue;
-    char disposition, factionID, rank;
-    char unknown;
-    int gold;
-  }; // 52 bytes
+    #pragma pack(push)
+    #pragma pack(1)
 
-  struct NPDTstruct12
-  {
-    short level;
-    char disposition, reputation, rank,
-      unknown1, unknown2, unknown3;
-    int gold; // ?? not certain
-  }; // 12 bytes
+    struct NPDTstruct52
+    {
+        short mLevel;
+        char mStrength,
+             mIntelligence,
+             mWillpower,
+             mAgility,
+             mSpeed,
+             mEndurance,
+             mPersonality,
+             mLuck;
 
-  struct AIDTstruct
-  {
-    // These are probabilities
-    char hello, u1, fight, flee, alarm, u2, u3, u4;
-    // The last u's might be the skills that this NPC can train you
-    // in?
-    int services; // See the Services enum
-  }; // 12 bytes
+        char mSkills[27];
+        char mReputation;
+        short mHealth, mMana, mFatigue;
+        char mDisposition, mFactionID, mRank;
+        char mUnknown;
+        int mGold;
+    }; // 52 bytes
 
-#pragma pack(pop)
+    struct NPDTstruct12
+    {
+        short mLevel;
+        char mDisposition, mReputation, mRank;
+        char mUnknown1, mUnknown2, mUnknown3;
+        int mGold; // ?? not certain
+    }; // 12 bytes
 
-  NPDTstruct52 npdt52;
-  NPDTstruct12 npdt12; // Use this if npdt52.gold == -10
+    struct Dest
+    {
+        Position    mPos;
+        std::string mCellName;
+    };
+    #pragma pack(pop)
 
-  int flags;
+    char mNpdtType;
+    NPDTstruct52 mNpdt52;
+    NPDTstruct12 mNpdt12; // Use this if npdt52.gold == -10
 
-  InventoryList inventory;
-  SpellList spells;
+    int mFlags;
 
-  AIDTstruct AI;
-  bool hasAI;
+    InventoryList mInventory;
+    SpellList mSpells;
 
-  std::string name, model, race, cls, faction, script,
-    hair, head; // body parts
+    AIData mAiData;
+    bool mHasAI;
 
-    std::string mId;
+    std::vector<Dest> mTransport;
+    AIPackageList     mAiPackage;
 
-  // Implementation moved to load_impl.cpp
-  void load(ESMReader &esm, const std::string& id);
+    std::string mId, mName, mModel, mRace, mClass, mFaction, mScript;
+
+    // body parts
+    std::string mHair, mHead;
+
+    // Implementation moved to load_impl.cpp
+    void load(ESMReader &esm);
+    void save(ESMWriter &esm);
+
+    bool isMale() const {
+        return (mFlags & Female) == 0;
+    }
+
+    void setIsMale(bool value) {
+        mFlags |= Female;
+        if (value) {
+            mFlags ^= Female;
+        }
+    }
 };
 }
 #endif

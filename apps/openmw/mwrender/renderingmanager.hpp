@@ -32,13 +32,21 @@ namespace MWWorld
     class CellStore;
 }
 
+namespace sh
+{
+    class Factory;
+}
+
 namespace MWRender
 {
     class Shadows;
-    class ShaderHelper;
     class LocalMap;
     class Water;
     class Compositors;
+    class ExternalRendering;
+    class GlobalMap;
+    class VideoPlayer;
+    class Animation;
 
 class RenderingManager: private RenderingInterface, public Ogre::WindowEventListener {
 
@@ -49,14 +57,34 @@ class RenderingManager: private RenderingInterface, public Ogre::WindowEventList
     virtual MWRender::Actors& getActors();
 
   public:
-    RenderingManager(OEngine::Render::OgreRenderer& _rend, const boost::filesystem::path& resDir, OEngine::Physic::PhysicEngine* engine);
+    RenderingManager(OEngine::Render::OgreRenderer& _rend, const boost::filesystem::path& resDir,
+                     const boost::filesystem::path& cacheDir, OEngine::Physic::PhysicEngine* engine);
     virtual ~RenderingManager();
 
+    void togglePOV() {
+        mPlayer->toggleViewMode();
+    }
 
+    void togglePreviewMode(bool enable) {
+        mPlayer->togglePreviewMode(enable);
+    }
 
-    virtual MWRender::Player& getPlayer(); /// \todo move this to private again as soon as
-                                            /// MWWorld::Player has been rewritten to not need access
-                                            /// to internal details of the rendering system anymore
+    bool toggleVanityMode(bool enable, bool force) {
+        return mPlayer->toggleVanityMode(enable, force);
+    }
+
+    void allowVanityMode(bool allow) {
+        mPlayer->allowVanityMode(allow);
+    }
+
+    void togglePlayerLooking(bool enable) {
+        mPlayer->togglePlayerLooking(enable);
+    }
+
+    void getPlayerData(Ogre::Vector3 &eyepos, float &pitch, float &yaw);
+
+    void attachCameraTo(const MWWorld::Ptr &ptr);
+    void renderPlayer(const MWWorld::Ptr &ptr);
 
     SkyManager* getSkyManager();
     Compositors* getCompositors();
@@ -85,16 +113,22 @@ class RenderingManager: private RenderingInterface, public Ogre::WindowEventList
 
     void moveObject (const MWWorld::Ptr& ptr, const Ogre::Vector3& position);
     void scaleObject (const MWWorld::Ptr& ptr, const Ogre::Vector3& scale);
-    void rotateObject (const MWWorld::Ptr& ptr, const::Ogre::Quaternion& orientation);
 
-    void checkUnderwater();
+    /// Rotates object accordingly to its type
+    /// \param rot euler angles in radians
+    /// \param adjust indicates should rotation be set or adjusted
+    /// \return true if object needs to be rotated physically
+    bool rotateObject (const MWWorld::Ptr& ptr, Ogre::Vector3 &rot, bool adjust = false);
+
     void setWaterHeight(const float height);
     void toggleWater();
 
-    /// \param store Cell the object was in previously (\a ptr has already been updated to the new cell).
-    void moveObjectToCell (const MWWorld::Ptr& ptr, const Ogre::Vector3& position, MWWorld::CellStore *store);
+    /// Updates object rendering after cell change
+    /// \param old Object reference in previous cell
+    /// \param cur Object reference in new cell
+    void updateObjectCell(const MWWorld::Ptr &old, const MWWorld::Ptr &cur);
 
-    void update (float duration);
+    void update (float duration, bool paused);
 
     void setAmbientColour(const Ogre::ColourValue& colour);
     void setSunColour(const Ogre::ColourValue& colour);
@@ -134,18 +168,6 @@ class RenderingManager: private RenderingInterface, public Ogre::WindowEventList
     /// configure fog manually
     void configureFog(const float density, const Ogre::ColourValue& colour);
 
-    void playAnimationGroup (const MWWorld::Ptr& ptr, const std::string& groupName, int mode,
-        int number = 1);
-    ///< Run animation for a MW-reference. Calls to this function for references that are currently not
-    /// in the rendered scene should be ignored.
-    ///
-    /// \param mode: 0 normal, 1 immediate start, 2 immediate loop
-    /// \param number How offen the animation should be run
-
-    void skipAnimation (const MWWorld::Ptr& ptr);
-    ///< Skip the animation for the given MW-reference for one frame. Calls to this function for
-    /// references that are currently not in the rendered scene should be ignored.
-
     Ogre::Vector4 boundingBoxToScreen(Ogre::AxisAlignedBox bounds);
     ///< transform the specified bounding box (in world coordinates) into screen coordinates.
     /// @return packed vector4 (min_x, min_y, max_x, max_y)
@@ -156,11 +178,26 @@ class RenderingManager: private RenderingInterface, public Ogre::WindowEventList
 
     static bool waterShaderSupported();
 
+    void getInteriorMapPosition (Ogre::Vector2 position, float& nX, float& nY, int &x, int& y);
+    ///< see MWRender::LocalMap::getInteriorMapPosition
+
+    bool isPositionExplored (float nX, float nY, int x, int y, bool interior);
+    ///< see MWRender::LocalMap::isPositionExplored
+
+    void setupExternalRendering (MWRender::ExternalRendering& rendering);
+
+    Animation* getAnimation(const MWWorld::Ptr &ptr);
+
+    void playVideo(const std::string& name, bool allowSkipping);
+    void stopVideo();
+
   protected:
 	virtual void windowResized(Ogre::RenderWindow* rw);
     virtual void windowClosed(Ogre::RenderWindow* rw);
 
   private:
+
+    sh::Factory* mFactory;
 
     void setAmbientMode();
 
@@ -178,6 +215,8 @@ class RenderingManager: private RenderingInterface, public Ogre::WindowEventList
 
     MWRender::Water *mWater;
 
+    GlobalMap* mGlobalMap;
+
     OEngine::Render::OgreRenderer &mRendering;
 
     MWRender::Objects mObjects;
@@ -189,10 +228,7 @@ class RenderingManager: private RenderingInterface, public Ogre::WindowEventList
     Ogre::ColourValue mAmbientColor;
     Ogre::Light* mSun;
 
-    /// Root node for all objects added to the scene. This is rotated so
-    /// that the OGRE coordinate system matches that used internally in
-    /// Morrowind.
-    Ogre::SceneNode *mMwRoot;
+    Ogre::SceneNode *mRootNode;
 
     OEngine::Physic::PhysicEngine* mPhysicsEngine;
 
@@ -204,9 +240,9 @@ class RenderingManager: private RenderingInterface, public Ogre::WindowEventList
 
     MWRender::Shadows* mShadows;
 
-    MWRender::ShaderHelper* mShaderHelper;
-
     MWRender::Compositors* mCompositors;
+
+    VideoPlayer* mVideoPlayer;
 };
 
 }

@@ -5,7 +5,7 @@
 
 #include <stdexcept>
 
-#include <components/esm/defs.hpp>
+#include <components/esm/effectlist.hpp>
 
 namespace MWMechanics
 {
@@ -13,19 +13,19 @@ namespace MWMechanics
 
     EffectKey::EffectKey (const ESM::ENAMstruct& effect)
     {
-        mId = effect.effectID;
+        mId = effect.mEffectID;
         mArg = -1;
 
-        if (effect.skill!=-1)
-            mArg = effect.skill;
+        if (effect.mSkill!=-1)
+            mArg = effect.mSkill;
 
-        if (effect.attribute!=-1)
+        if (effect.mAttribute!=-1)
         {
             if (mArg!=-1)
                 throw std::runtime_error (
                     "magic effect can't have both a skill and an attribute argument");
 
-            mArg = effect.attribute;
+            mArg = effect.mAttribute;
         }
     }
 
@@ -68,19 +68,23 @@ namespace MWMechanics
         }
     }
 
-    void MagicEffects::add (const ESM::EffectList& list)
+    void MagicEffects::add (const ESM::EffectList& list, float magnitude)
     {
-        for (std::vector<ESM::ENAMstruct>::const_iterator iter (list.list.begin()); iter!=list.list.end();
+        for (std::vector<ESM::ENAMstruct>::const_iterator iter (list.mList.begin()); iter!=list.mList.end();
             ++iter)
         {
             EffectParam param;
 
-            if (iter->magnMin>=iter->magnMax)
-                param.mMagnitude = iter->magnMin;
+            if (iter->mMagnMin>=iter->mMagnMax)
+                param.mMagnitude = iter->mMagnMin;
             else
+            {
+                if (magnitude==-1)
+                    magnitude = static_cast<float> (std::rand()) / RAND_MAX;
+
                 param.mMagnitude = static_cast<int> (
-                    (iter->magnMax-iter->magnMin+1)*
-                    (static_cast<float> (std::rand()) / RAND_MAX) + iter->magnMin);
+                    (iter->mMagnMax-iter->mMagnMin+1)*magnitude + iter->mMagnMin);
+            }
 
             add (*iter, param);
         }

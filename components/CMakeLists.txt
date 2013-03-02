@@ -34,16 +34,12 @@ add_component_dir (file_finder
     file_finder filename_less search
     )
 
-add_component_dir (esm_store
-    reclists store
-    )
-
 add_component_dir (esm
-    attr defs esm_reader loadacti loadalch loadappa loadarmo loadbody loadbook loadbsgn loadcell
+    attr defs esmcommon esmreader esmwriter loadacti loadalch loadappa loadarmo loadbody loadbook loadbsgn loadcell
     loadclas loadclot loadcont loadcrea loadcrec loaddial loaddoor loadench loadfact loadglob loadgmst
     loadinfo loadingr loadland loadlevlist loadligh loadlocks loadltex loadmgef loadmisc loadnpcc
     loadnpc loadpgrd loadrace loadregn loadscpt loadskil loadsndg loadsoun loadspel loadsscr loadstat
-    loadweap records
+    loadweap records aipackage effectlist spelllist
     )
 
 add_component_dir (misc
@@ -52,7 +48,7 @@ add_component_dir (misc
 
 add_component_dir (files
     linuxpath windowspath macospath fixedpath multidircollection collections fileops configurationmanager
-    filelibrary
+    filelibrary ogreplugin constrainedfiledatastream lowlevelfile
     )
 
 add_component_dir (compiler
@@ -63,12 +59,28 @@ add_component_dir (compiler
 
 add_component_dir (interpreter
     context controlopcodes genericopcodes installopcodes interpreter localopcodes mathopcodes
-    miscopcodes opcodes runtime scriptopcodes spatialopcodes types
+    miscopcodes opcodes runtime scriptopcodes spatialopcodes types defines
     )
+
+add_component_dir (translation
+    translation
+    )
+
+find_package(Qt4 COMPONENTS QtCore QtGui)
+
+if(QT_QTGUI_LIBRARY AND QT_QTCORE_LIBRARY)
+   add_component_qt_dir (fileorderlist
+       datafileslist model/modelitem model/datafilesmodel model/esm/esmfile
+       utils/filedialog utils/lineedit utils/naturalsort
+       )
+
+   include(${QT_USE_FILE})
+   QT4_WRAP_CPP(MOC_SRCS ${COMPONENT_MOC_FILES})
+endif(QT_QTGUI_LIBRARY AND QT_QTCORE_LIBRARY)
 
 include_directories(${BULLET_INCLUDE_DIRS})
 
-add_library(components STATIC ${COMPONENT_FILES})
+add_library(components STATIC ${COMPONENT_FILES} ${MOC_SRCS})
 
 target_link_libraries(components ${Boost_LIBRARIES} ${OGRE_LIBRARIES})
 

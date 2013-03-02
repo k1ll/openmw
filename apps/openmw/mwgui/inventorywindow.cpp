@@ -7,8 +7,12 @@
 
 #include <boost/lexical_cast.hpp>
 
+#include <components/compiler/locals.hpp>
+
 #include "../mwbase/world.hpp"
 #include "../mwbase/environment.hpp"
+#include "../mwbase/soundmanager.hpp"
+#include "../mwbase/windowmanager.hpp"
 
 #include "../mwworld/containerstore.hpp"
 #include "../mwworld/class.hpp"
@@ -17,40 +21,26 @@
 #include "../mwworld/actiontake.hpp"
 #include "../mwworld/inventorystore.hpp"
 
-#include "../mwsound/soundmanager.hpp"
-
-#include "../mwclass/container.hpp"
-
-#include "window_manager.hpp"
 #include "widgets.hpp"
 #include "bookwindow.hpp"
 #include "scrollwindow.hpp"
 #include "spellwindow.hpp"
 
-namespace
-{
-    std::string toLower (const std::string& name)
-    {
-        std::string lowerCase;
-
-        std::transform (name.begin(), name.end(), std::back_inserter (lowerCase),
-            (int(*)(int)) std::tolower);
-
-        return lowerCase;
-    }
-}
-
 namespace MWGui
 {
 
-    InventoryWindow::InventoryWindow(WindowManager& parWindowManager,DragAndDrop* dragAndDrop)
+    InventoryWindow::InventoryWindow(MWBase::WindowManager& parWindowManager,DragAndDrop* dragAndDrop)
         : ContainerBase(dragAndDrop)
         , WindowPinnableBase("openmw_inventory_window.layout", parWindowManager)
         , mTrading(false)
+        , mLastXSize(0)
+        , mLastYSize(0)
+        , mPreview(MWBase::Environment::get().getWorld ()->getPlayer ().getPlayer ())
     {
         static_cast<MyGUI::Window*>(mMainWidget)->eventWindowChangeCoord += MyGUI::newDelegate(this, &InventoryWindow::onWindowResize);
 
         getWidget(mAvatar, "Avatar");
+        getWidget(mAvatarImage, "AvatarImage");
         getWidget(mEncumbranceBar, "EncumbranceBar");
         getWidget(mEncumbranceText, "EncumbranceBarT");
         getWidget(mFilterAll, "AllButton");
@@ -69,26 +59,6 @@ namespace MWGui
         getWidget(itemView, "ItemView");
         setWidgets(containerWidget, itemView);
 
-        // adjust size of buttons to fit text
-        int curX = 0;
-        mFilterAll->setSize( mFilterAll->getTextSize().width + 24, mFilterAll->getSize().height );
-        curX += mFilterAll->getTextSize().width + 24 + 4;
-
-        mFilterWeapon->setPosition(curX, mFilterWeapon->getPosition().top);
-        mFilterWeapon->setSize( mFilterWeapon->getTextSize().width + 24, mFilterWeapon->getSize().height );
-        curX += mFilterWeapon->getTextSize().width + 24 + 4;
-
-        mFilterApparel->setPosition(curX, mFilterApparel->getPosition().top);
-        mFilterApparel->setSize( mFilterApparel->getTextSize().width + 24, mFilterApparel->getSize().height );
-        curX += mFilterApparel->getTextSize().width + 24 + 4;
-
-        mFilterMagic->setPosition(curX, mFilterMagic->getPosition().top);
-        mFilterMagic->setSize( mFilterMagic->getTextSize().width + 24, mFilterMagic->getSize().height );
-        curX += mFilterMagic->getTextSize().width + 24 + 4;
-
-        mFilterMisc->setPosition(curX, mFilterMisc->getPosition().top);
-        mFilterMisc->setSize( mFilterMisc->getTextSize().width + 24, mFilterMisc->getSize().height );
-
         mFilterAll->eventMouseButtonClick += MyGUI::newDelegate(this, &InventoryWindow::onFilterChanged);
         mFilterWeapon->eventMouseButtonClick += MyGUI::newDelegate(this, &InventoryWindow::onFilterChanged);
         mFilterApparel->eventMouseButtonClick += MyGUI::newDelegate(this, &InventoryWindow::onFilterChanged);
@@ -98,6 +68,8 @@ namespace MWGui
         mFilterAll->setStateSelected(true);
 
         setCoord(0, 342, 498, 258);
+
+        mPreview.setup();
 
         MWWorld::Ptr player = MWBase::Environment::get().getWorld()->getPlayer().getPlayer();
         openContainer(player);
@@ -112,6 +84,7 @@ namespace MWGui
         mBoughtItems.clear();
 
         onWindowResize(static_cast<MyGUI::Window*>(mMainWidget));
+        drawItems();
     }
 
     void InventoryWindow::onWindowResize(MyGUI::Window* _sender)
@@ -122,7 +95,13 @@ namespace MWGui
                               mRightPane->getPosition().top,
                               _sender->getSize().width - 12 - (_sender->getSize().height-44) * aspect - 15,
                               _sender->getSize().height-44 );
-        drawItems();
+
+        if (mMainWidget->getSize().width != mLastXSize || mMainWidget->getSize().height != mLastYSize)
+        {
+            drawItems();
+            mLastXSize = mMainWidget->getSize().width;
+            mLastYSize = mMainWidget->getSize().height;
+        }
     }
 
     void InventoryWindow::onFilterChanged(MyGUI::Widget* _sender)
@@ -175,7 +154,7 @@ namespace MWGui
 
             boost::shared_ptr<MWWorld::Action> action = MWWorld::Class::get(ptr).use(ptr);
 
-            action->execute();
+            action->execute (MWBase::Environment::get().getWorld()->getPlayer().getPlayer());
 
             // this is necessary for books/scrolls: if they are already in the player's inventory,
             // the "Take" button should not be visible.
@@ -194,15 +173,45 @@ namespace MWGui
 
             drawItems();
 
-            // update selected weapon icon
-            MWWorld::InventoryStore& invStore = MWWorld::Class::get(mPtr).getInventoryStore(mPtr);
-            MWWorld::ContainerStoreIterator weaponSlot = invStore.getSlot(MWWorld::InventoryStore::Slot_CarriedRight);
-            if (weaponSlot == invStore.end())
-                mWindowManager.unsetSelectedWeapon();
-            else
-                mWindowManager.setSelectedWeapon(*weaponSlot, 100); /// \todo track weapon durability
-
+            notifyContentChanged();
         }
+        else
+        {
+            MyGUI::IntPoint mousePos = MyGUI::InputManager::getInstance ().getLastPressedPosition (MyGUI::MouseButton::Left);
+            MyGUI::IntPoint relPos = mousePos - mAvatar->getAbsolutePosition ();
+            int realX = int(float(relPos.left) / float(mAvatar->getSize().width) * 512.f );
+            int realY = int(float(relPos.top) / float(mAvatar->getSize().height) * 1024.f );
+
+            MWWorld::Ptr itemSelected = getAvatarSelectedItem (realX, realY);
+            if (itemSelected.isEmpty ())
+                return;
+
+            for (unsigned int i=0; i < mContainerWidget->getChildCount (); ++i)
+            {
+                MyGUI::Widget* w = mContainerWidget->getChildAt (i);
+
+                if (*w->getUserData<MWWorld::Ptr>() == itemSelected)
+                {
+                    onSelectedItem(w);
+                    return;
+                }
+            }
+        }
+    }
+
+    MWWorld::Ptr InventoryWindow::getAvatarSelectedItem(int x, int y)
+    {
+        int slot = mPreview.getSlotSelected (x, y);
+
+        if (slot == -1)
+            return MWWorld::Ptr();
+
+        MWWorld::Ptr player = mPtr;
+        MWWorld::InventoryStore& invStore = MWWorld::Class::get(player).getInventoryStore(player);
+        if (invStore.getSlot(slot) != invStore.end())
+            return *invStore.getSlot (slot);
+        else
+            return MWWorld::Ptr();
     }
 
     std::vector<MWWorld::Ptr> InventoryWindow::getEquippedItems()
@@ -233,6 +242,12 @@ namespace MWGui
             if (it != invStore.end() && *it == item)
             {
                 invStore.equip(slot, invStore.end());
+                std::string script = MWWorld::Class::get(*it).getScript(*it);
+                
+                // Unset OnPCEquip Variable on item's script, if it has a script with that variable declared
+                if(script != "")
+                    (*it).mRefData->getLocals().setVarByInt(script, "onpcequip", 0);
+                
                 return;
             }
         }
@@ -264,7 +279,7 @@ namespace MWGui
         for (MWWorld::ContainerStoreIterator it = invStore.begin();
                 it != invStore.end(); ++it)
         {
-            if (toLower(it->getCellRef().refID) == "gold_001")
+            if (Misc::StringUtils::ciEqual(it->getCellRef().mRefID, "gold_001"))
                 return it->getRefData().getCount();
         }
         return 0;
@@ -288,6 +303,12 @@ namespace MWGui
             mWindowManager.unsetSelectedWeapon();
         else
             mWindowManager.setSelectedWeapon(*weaponSlot, 100); /// \todo track weapon durability
+
+        MyGUI::IntSize size = mAvatar->getSize();
+
+        mPreview.update (size.width, size.height);
+        mAvatarImage->setSize(MyGUI::IntSize(std::max(mAvatar->getSize().width, 512), std::max(mAvatar->getSize().height, 1024)));
+        mAvatarImage->setImageTexture("CharacterPreview");
     }
 
     void InventoryWindow::pickUpObject (MWWorld::Ptr object)
@@ -331,12 +352,12 @@ namespace MWGui
 
         std::string path = std::string("icons\\");
         path += MWWorld::Class::get(newObject).getInventoryIcon(newObject);
-        MyGUI::ImageBox* baseWidget = mContainerWidget->createWidget<ImageBox>("ImageBox", MyGUI::IntCoord(0, 0, 42, 42), MyGUI::Align::Default);
+        MyGUI::ImageBox* baseWidget = mContainerWidget->createWidget<MyGUI::ImageBox>("ImageBox", MyGUI::IntCoord(0, 0, 42, 42), MyGUI::Align::Default);
         baseWidget->detachFromWidget();
         baseWidget->attachToWidget(mDragAndDrop->mDragAndDropWidget);
         baseWidget->setUserData(newObject);
         mDragAndDrop->mDraggedWidget = baseWidget;
-        ImageBox* image = baseWidget->createWidget<ImageBox>("ImageBox", MyGUI::IntCoord(5, 5, 32, 32), MyGUI::Align::Default);
+        MyGUI::ImageBox* image = baseWidget->createWidget<MyGUI::ImageBox>("ImageBox", MyGUI::IntCoord(5, 5, 32, 32), MyGUI::Align::Default);
         int pos = path.rfind(".");
         path.erase(pos);
         path.append(".dds");
@@ -351,5 +372,10 @@ namespace MWGui
         text->setTextShadowColour(MyGUI::Colour(0,0,0));
         text->setCaption(getCountString(count));
         mDragAndDrop->mDraggedFrom = this;
+    }
+
+    MyGUI::IntCoord InventoryWindow::getAvatarScreenCoord ()
+    {
+        return mAvatar->getAbsoluteCoord ();
     }
 }

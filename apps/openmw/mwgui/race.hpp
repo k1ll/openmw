@@ -1,11 +1,15 @@
 #ifndef MWGUI_RACE_H
 #define MWGUI_RACE_H
 
-#include <components/esm_store/store.hpp>
+
+#include <boost/array.hpp>
+
+#include "../mwworld/esmstore.hpp"
+
+#include "../mwrender/characterpreview.hpp"
 
 #include "window_base.hpp"
 
-#include <boost/array.hpp>
 
 namespace MWGui
 {
@@ -19,12 +23,10 @@ namespace MWGui
 
 namespace MWGui
 {
-    using namespace MyGUI;
-
-    class RaceDialog : public WindowBase
+    class RaceDialog : public WindowModal
     {
     public:
-        RaceDialog(WindowManager& parWindowManager);
+        RaceDialog(MWBase::WindowManager& parWindowManager);
 
         enum Gender
         {
@@ -32,6 +34,7 @@ namespace MWGui
             GM_Female
         };
 
+        const ESM::NPC &getResult() const { return mPreview->getPrototype(); }
         const std::string &getRaceId() const { return mCurrentRaceId; }
         Gender getGender() const { return mGenderIndex == 0 ? GM_Male : GM_Female; }
         // getFace()
@@ -43,10 +46,11 @@ namespace MWGui
         // setHair()
 
         void setNextButtonShow(bool shown);
-        void open();
+        virtual void open();
+        virtual void close();
 
         // Events
-        typedef delegates::CMultiDelegate0 EventHandle_Void;
+        typedef MyGUI::delegates::CMultiDelegate0 EventHandle_Void;
 
         /** Event : Back button clicked.\n
             signature : void method()\n
@@ -74,8 +78,10 @@ namespace MWGui
         void updateRaces();
         void updateSkills();
         void updateSpellPowers();
+        void updatePreview();
+        void recountParts();
 
-        MyGUI::CanvasPtr  mAppearanceBox;
+        MyGUI::ImageBox*  mPreviewImage;
         MyGUI::ListBox*   mRaceList;
         MyGUI::ScrollBar* mHeadRotate;
 
@@ -89,6 +95,10 @@ namespace MWGui
         int mFaceCount, mHairCount;
 
         std::string mCurrentRaceId;
+
+        float mCurrentAngle;
+
+        MWRender::RaceSelectionPreview* mPreview;
     };
 }
 #endif

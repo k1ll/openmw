@@ -5,7 +5,10 @@
 
 #include <OgreVector3.h>
 
+#include <components/esm/defs.hpp>
+
 #include "ptr.hpp"
+#include "refdata.hpp"
 #include "nullaction.hpp"
 #include "containerstore.hpp"
 
@@ -119,6 +122,11 @@ namespace MWWorld
         return 0;
     }
 
+    float Class::getJump (const Ptr& ptr) const
+    {
+        return 0;
+    }
+
     MWMechanics::Movement& Class::getMovementSettings (const Ptr& ptr) const
     {
         throw std::runtime_error ("movement settings not supported by class");
@@ -152,6 +160,16 @@ namespace MWWorld
     float Class::getEncumbrance (const MWWorld::Ptr& ptr) const
     {
         throw std::runtime_error ("encumbrance not supported by class");
+    }
+
+    bool Class::isEssential (const MWWorld::Ptr& ptr) const
+    {
+        return false;
+    }
+
+     bool Class::hasDetected (const MWWorld::Ptr& ptr, const MWWorld::Ptr& ptr2) const
+    {
+        return false;
     }
 
     const Class& Class::get (const std::string& key)
@@ -211,5 +229,33 @@ namespace MWWorld
 
     void Class::adjustRotation(const MWWorld::Ptr& ptr,float& x,float& y,float& z) const
     {
+    }
+
+    std::string Class::getModel(const MWWorld::Ptr &ptr) const
+    {
+        return "";
+    }
+
+    MWWorld::Ptr
+    Class::copyToCellImpl(const Ptr &ptr, CellStore &cell) const
+    {
+        throw std::runtime_error("unable to move class to cell");
+    }
+
+    MWWorld::Ptr
+    Class::copyToCell(const Ptr &ptr, CellStore &cell) const
+    {
+        Ptr newPtr = copyToCellImpl(ptr, cell);
+
+        return newPtr;
+    }
+
+    MWWorld::Ptr
+    Class::copyToCell(const Ptr &ptr, CellStore &cell, const ESM::Position &pos) const
+    {
+        Ptr newPtr = copyToCell(ptr, cell);
+        newPtr.getRefData().getPosition() = pos;
+
+        return newPtr;
     }
 }

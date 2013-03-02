@@ -3,8 +3,10 @@
 
 namespace MyGUI
 {
-  class OgrePlatform;
   class Gui;
+  class LogManager;
+  class OgreDataManager;
+  class OgreRenderManager;
 }
 
 namespace Ogre
@@ -16,21 +18,31 @@ namespace Ogre
 namespace OEngine {
 namespace GUI
 {
-  class MyGUIManager
-  {
-    MyGUI::OgrePlatform *mPlatform;
-    MyGUI::Gui *mGui;
+    class MyGUIManager
+    {
+        MyGUI::Gui *mGui;
+        MyGUI::LogManager* mLogManager;
+        MyGUI::OgreDataManager* mDataManager;
+        MyGUI::OgreRenderManager* mRenderManager;
+        Ogre::SceneManager* mSceneMgr;
 
-  public:
-    MyGUIManager() : mPlatform(NULL), mGui(NULL) {}
-    MyGUIManager(Ogre::RenderWindow *wnd, Ogre::SceneManager *mgr, bool logging=false, const std::string& logDir = std::string(""))
-    { setup(wnd,mgr,logging, logDir); }
-    ~MyGUIManager() { shutdown(); }
 
-    void setup(Ogre::RenderWindow *wnd, Ogre::SceneManager *mgr, bool logging=false, const std::string& logDir = std::string(""));
-    void shutdown();
+    public:
+        MyGUIManager() : mLogManager(NULL), mDataManager(NULL), mRenderManager(NULL),  mGui(NULL) {}
+        MyGUIManager(Ogre::RenderWindow *wnd, Ogre::SceneManager *mgr, bool logging=false, const std::string& logDir = std::string(""))
+        {
+            setup(wnd,mgr,logging, logDir);
+        }
+        ~MyGUIManager()
+        {
+            shutdown();
+        }
 
-    MyGUI::Gui *getGui() { return mGui; }
-  };
-}}
+        void setup(Ogre::RenderWindow *wnd, Ogre::SceneManager *mgr, bool logging=false, const std::string& logDir = std::string(""));
+        void shutdown();
+
+        MyGUI::Gui *getGui() { return mGui; }
+    };
+}
+}
 #endif

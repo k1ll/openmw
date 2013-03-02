@@ -24,7 +24,7 @@
 #ifndef _NIF_RECORD_H_
 #define _NIF_RECORD_H_
 
-#include <components/misc/slice_array.hpp>
+#include <string>
 
 namespace Nif
 {
@@ -48,6 +48,7 @@ enum RecordType
   RC_NiDitherProperty,
   RC_NiWireframeProperty,
   RC_NiSpecularProperty,
+  RC_NiStencilProperty,
   RC_NiVisController,
   RC_NiGeomMorpherController,
   RC_NiKeyframeController,
@@ -91,8 +92,9 @@ struct Record
     // Record type and type name
     int recType;
     std::string recName;
+    size_t recIndex;
 
-    Record() : recType(RC_MISSING) {}
+    Record() : recType(RC_MISSING), recIndex(~(size_t)0) {}
 
     /// Parses the record from file
     virtual void read(NIFFile *nif) = 0;

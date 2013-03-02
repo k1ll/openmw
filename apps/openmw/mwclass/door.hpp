@@ -7,6 +7,9 @@ namespace MWClass
 {
     class Door : public MWWorld::Class
     {
+            virtual MWWorld::Ptr
+            copyToCellImpl(const MWWorld::Ptr &ptr, MWWorld::CellStore &cell) const;
+
         public:
 
             virtual void insertObjectRendering (const MWWorld::Ptr& ptr, MWRender::RenderingInterface& renderingInterface) const;
@@ -28,6 +31,9 @@ namespace MWClass
             virtual MWGui::ToolTipInfo getToolTipInfo (const MWWorld::Ptr& ptr) const;
             ///< @return the content of the tool tip to be displayed. raises exception if the object has no tooltip.
 
+            static std::string getDestination (const MWWorld::LiveCellRef<ESM::Door>& door);
+            ///< @return destination cell name or token
+
             virtual void lock (const MWWorld::Ptr& ptr, int lockLevel) const;
             ///< Lock object
 
@@ -38,6 +44,8 @@ namespace MWClass
             ///< Return name of the script attached to ptr
 
             static void registerSelf();
+
+            virtual std::string getModel(const MWWorld::Ptr &ptr) const;
     };
 }
 

@@ -2,6 +2,7 @@
 #define GAME_MWWORLD_CELLS_H
 
 #include <map>
+#include <list>
 #include <string>
 
 #include "ptr.hpp"
@@ -11,18 +12,15 @@ namespace ESM
     class ESMReader;
 }
 
-namespace ESM
-{
-    class ESMStore;
-}
-
 namespace MWWorld
 {
+    class ESMStore;
+
     /// \brief Cell container
     class Cells
     {
-            const ESMS::ESMStore& mStore;
-            ESM::ESMReader& mReader;
+            const MWWorld::ESMStore& mStore;
+            std::vector<ESM::ESMReader>& mReader;
             std::map<std::string, CellStore> mInteriors;
             std::map<std::pair<int, int>, CellStore> mExteriors;
             std::vector<std::pair<std::string, CellStore *> > mIdCache;
@@ -39,7 +37,7 @@ namespace MWWorld
 
         public:
 
-            Cells (const ESMS::ESMStore& store, ESM::ESMReader& reader);
+            Cells (const MWWorld::ESMStore& store, std::vector<ESM::ESMReader>& reader);
             ///< \todo pass the dynamic part of the ESMStore isntead (once it is written) of the whole
             /// world
 

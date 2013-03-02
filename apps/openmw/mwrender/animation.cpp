@@ -1,502 +1,453 @@
 #include "animation.hpp"
 
-#include <OgreHardwarePixelBuffer.h>
+#include <OgreSkeletonManager.h>
 #include <OgreSkeletonInstance.h>
 #include <OgreEntity.h>
 #include <OgreBone.h>
 #include <OgreSubMesh.h>
+#include <OgreSceneManager.h>
+
+#include "../mwbase/environment.hpp"
+#include "../mwbase/soundmanager.hpp"
+#include "../mwbase/world.hpp"
+
+#include "../mwmechanics/character.hpp"
 
 namespace MWRender
 {
-    std::map<std::string, int> Animation::sUniqueIDs;
 
-    Animation::Animation(OEngine::Render::OgreRenderer& _rend)
-        : mInsert(NULL)
-        , mRend(_rend)
-        , mVecRotPos()
-        , mTime(0.0f)
-        , mStartTime(0.0f)
-        , mStopTime(0.0f)
-        , mAnimate(0)
-        , mRindexI()
-        , mTindexI()
-        , mShapeNumber(0)
-        , mShapeIndexI()
-        , mShapes(NULL)
-        , mTransformations(NULL)
-        , mTextmappings(NULL)
-        , mBase(NULL)
+Animation::Animation(const MWWorld::Ptr &ptr)
+    : mPtr(ptr)
+    , mController(NULL)
+    , mInsert(NULL)
+    , mAccumRoot(NULL)
+    , mNonAccumRoot(NULL)
+    , mAccumulate(Ogre::Vector3::ZERO)
+    , mLastPosition(0.0f)
+    , mCurrentKeys(NULL)
+    , mCurrentAnim(NULL)
+    , mCurrentTime(0.0f)
+    , mStopTime(0.0f)
+    , mPlaying(false)
+    , mLooping(false)
+    , mAnimVelocity(0.0f)
+    , mAnimSpeedMult(1.0f)
+{
+}
+
+Animation::~Animation()
+{
+    if(mInsert)
     {
+        Ogre::SceneManager *sceneMgr = mInsert->getCreator();
+        for(size_t i = 0;i < mEntityList.mEntities.size();i++)
+            sceneMgr->destroyEntity(mEntityList.mEntities[i]);
     }
+    mEntityList.mEntities.clear();
+    mEntityList.mSkelBase = NULL;
+}
 
-    Animation::~Animation()
-    {
-    }
 
-    std::string Animation::getUniqueID(std::string mesh)
+void Animation::setAnimationSources(const std::vector<std::string> &names)
+{
+    if(!mEntityList.mSkelBase)
+        return;
+
+    mCurrentAnim = NULL;
+    mCurrentKeys = NULL;
+    mAnimVelocity = 0.0f;
+    mAccumRoot = NULL;
+    mNonAccumRoot = NULL;
+    mSkeletonSources.clear();
+
+    std::vector<std::string>::const_iterator nameiter;
+    for(nameiter = names.begin();nameiter != names.end();nameiter++)
     {
-        int counter;
-        std::string copy = mesh;
-        std::transform(copy.begin(), copy.end(), copy.begin(), ::tolower);
-        
-        if(sUniqueIDs.find(copy) == sUniqueIDs.end())
+        Ogre::SkeletonPtr skel = NifOgre::Loader::getSkeleton(*nameiter);
+        if(skel.isNull())
         {
-            counter = sUniqueIDs[copy] = 0;
+            std::cerr<< "Failed to get skeleton source "<<*nameiter <<std::endl;
+            continue;
+        }
+        skel->touch();
+
+        Ogre::Skeleton::BoneIterator boneiter = skel->getBoneIterator();
+        while(boneiter.hasMoreElements())
+        {
+            Ogre::Bone *bone = boneiter.getNext();
+            Ogre::UserObjectBindings &bindings = bone->getUserObjectBindings();
+            const Ogre::Any &data = bindings.getUserAny(NifOgre::sTextKeyExtraDataID);
+            if(data.isEmpty() || !Ogre::any_cast<bool>(data))
+                continue;
+
+            if(!mNonAccumRoot)
+            {
+                mAccumRoot = mInsert;
+                mNonAccumRoot = mEntityList.mSkelBase->getSkeleton()->getBone(bone->getName());
+            }
+
+            mSkeletonSources.push_back(skel);
+            for(int i = 0;i < skel->getNumAnimations();i++)
+            {
+                Ogre::Animation *anim = skel->getAnimation(i);
+                const Ogre::Any &groupdata = bindings.getUserAny(std::string(NifOgre::sTextKeyExtraDataID)+
+                                                                "@"+anim->getName());
+                if(!groupdata.isEmpty())
+                    mTextKeys[anim->getName()] = Ogre::any_cast<NifOgre::TextKeyMap>(groupdata);
+            }
+
+            break;
+        }
+    }
+}
+
+void Animation::createEntityList(Ogre::SceneNode *node, const std::string &model)
+{
+    mInsert = node->createChildSceneNode();
+    assert(mInsert);
+
+    mEntityList = NifOgre::Loader::createEntities(mInsert, model);
+    if(mEntityList.mSkelBase)
+    {
+        Ogre::AnimationStateSet *aset = mEntityList.mSkelBase->getAllAnimationStates();
+        Ogre::AnimationStateIterator asiter = aset->getAnimationStateIterator();
+        while(asiter.hasMoreElements())
+        {
+            Ogre::AnimationState *state = asiter.getNext();
+            state->setEnabled(false);
+            state->setLoop(false);
+        }
+
+        // Set the bones as manually controlled since we're applying the
+        // transformations manually (needed if we want to apply an animation
+        // from one skeleton onto another).
+        Ogre::SkeletonInstance *skelinst = mEntityList.mSkelBase->getSkeleton();
+        Ogre::Skeleton::BoneIterator boneiter = skelinst->getBoneIterator();
+        while(boneiter.hasMoreElements())
+            boneiter.getNext()->setManuallyControlled(true);
+    }
+}
+
+
+bool Animation::hasAnimation(const std::string &anim)
+{
+    for(std::vector<Ogre::SkeletonPtr>::const_iterator iter(mSkeletonSources.begin());iter != mSkeletonSources.end();iter++)
+    {
+        if((*iter)->hasAnimation(anim))
+            return true;
+    }
+    return false;
+}
+
+
+void Animation::setController(MWMechanics::CharacterController *controller)
+{
+    mController = controller;
+}
+
+
+void Animation::setAccumulation(const Ogre::Vector3 &accum)
+{
+    mAccumulate = accum;
+}
+
+void Animation::setSpeed(float speed)
+{
+    mAnimSpeedMult = 1.0f;
+    if(mAnimVelocity > 1.0f && speed > 0.0f)
+        mAnimSpeedMult = speed / mAnimVelocity;
+}
+
+void Animation::setLooping(bool loop)
+{
+    mLooping = loop;
+}
+
+void Animation::updatePtr(const MWWorld::Ptr &ptr)
+{
+    mPtr = ptr;
+}
+
+
+void Animation::calcAnimVelocity()
+{
+    const Ogre::NodeAnimationTrack *track = 0;
+
+    Ogre::Animation::NodeTrackIterator trackiter = mCurrentAnim->getNodeTrackIterator();
+    while(!track && trackiter.hasMoreElements())
+    {
+        const Ogre::NodeAnimationTrack *cur = trackiter.getNext();
+        if(cur->getAssociatedNode()->getName() == mNonAccumRoot->getName())
+            track = cur;
+    }
+
+    if(track && track->getNumKeyFrames() > 1)
+    {
+        float loopstarttime = 0.0f;
+        float loopstoptime = mCurrentAnim->getLength();
+        NifOgre::TextKeyMap::const_iterator keyiter = mCurrentKeys->begin();
+        while(keyiter != mCurrentKeys->end())
+        {
+            if(keyiter->second == "loop start")
+                loopstarttime = keyiter->first;
+            else if(keyiter->second == "loop stop")
+            {
+                loopstoptime = keyiter->first;
+                break;
+            }
+            keyiter++;
+        }
+
+        if(loopstoptime > loopstarttime)
+        {
+            Ogre::TransformKeyFrame startkf(0, loopstarttime);
+            Ogre::TransformKeyFrame endkf(0, loopstoptime);
+
+            track->getInterpolatedKeyFrame(mCurrentAnim->_getTimeIndex(loopstarttime), &startkf);
+            track->getInterpolatedKeyFrame(mCurrentAnim->_getTimeIndex(loopstoptime), &endkf);
+
+            mAnimVelocity = startkf.getTranslate().distance(endkf.getTranslate()) /
+                            (loopstoptime-loopstarttime);
+        }
+    }
+}
+
+void Animation::applyAnimation(const Ogre::Animation *anim, float time, Ogre::SkeletonInstance *skel)
+{
+    Ogre::TimeIndex timeindex = anim->_getTimeIndex(time);
+    Ogre::Animation::NodeTrackIterator tracks = anim->getNodeTrackIterator();
+    while(tracks.hasMoreElements())
+    {
+        Ogre::NodeAnimationTrack *track = tracks.getNext();
+        const Ogre::String &targetname = track->getAssociatedNode()->getName();
+        if(!skel->hasBone(targetname))
+            continue;
+        Ogre::Bone *bone = skel->getBone(targetname);
+        bone->setOrientation(Ogre::Quaternion::IDENTITY);
+        bone->setPosition(Ogre::Vector3::ZERO);
+        bone->setScale(Ogre::Vector3::UNIT_SCALE);
+        track->applyToNode(bone, timeindex);
+    }
+
+    // HACK: Dirty the animation state set so that Ogre will apply the
+    // transformations to entities this skeleton instance is shared with.
+    mEntityList.mSkelBase->getAllAnimationStates()->_notifyDirty();
+}
+
+static void updateBoneTree(const Ogre::SkeletonInstance *skelsrc, Ogre::Bone *bone)
+{
+    if(skelsrc->hasBone(bone->getName()))
+    {
+        Ogre::Bone *srcbone = skelsrc->getBone(bone->getName());
+        if(!srcbone->getParent() || !bone->getParent())
+        {
+            bone->setOrientation(srcbone->getOrientation());
+            bone->setPosition(srcbone->getPosition());
+            bone->setScale(srcbone->getScale());
         }
         else
         {
-            sUniqueIDs[copy] = sUniqueIDs[copy] + 1;
-            counter = sUniqueIDs[copy];
+            bone->_setDerivedOrientation(srcbone->_getDerivedOrientation());
+            bone->_setDerivedPosition(srcbone->_getDerivedPosition());
+            bone->setScale(Ogre::Vector3::UNIT_SCALE);
         }
+    }
+    else
+    {
+        // No matching bone in the source. Make sure it stays properly offset
+        // from its parent.
+        bone->resetToInitialState();
+    }
 
-        std::stringstream out;
-        
-        if(counter > 99 && counter < 1000)
-            out << "0";
-        else if(counter > 9)
-            out << "00";
+    Ogre::Node::ChildNodeIterator boneiter = bone->getChildIterator();
+    while(boneiter.hasMoreElements())
+        updateBoneTree(skelsrc, static_cast<Ogre::Bone*>(boneiter.getNext()));
+}
+
+void Animation::updateSkeletonInstance(const Ogre::SkeletonInstance *skelsrc, Ogre::SkeletonInstance *skel)
+{
+    Ogre::Skeleton::BoneIterator boneiter = skel->getRootBoneIterator();
+    while(boneiter.hasMoreElements())
+        updateBoneTree(skelsrc, boneiter.getNext());
+}
+
+
+Ogre::Vector3 Animation::updatePosition(float time)
+{
+    if(mLooping)
+        mCurrentTime = std::fmod(std::max(time, 0.0f), mCurrentAnim->getLength());
+    else
+        mCurrentTime = std::min(mCurrentAnim->getLength(), std::max(time, 0.0f));
+    applyAnimation(mCurrentAnim, mCurrentTime, mEntityList.mSkelBase->getSkeleton());
+
+    Ogre::Vector3 posdiff = Ogre::Vector3::ZERO;
+    if(mNonAccumRoot)
+    {
+        /* Get the non-accumulation root's difference from the last update. */
+        posdiff = (mNonAccumRoot->getPosition() - mLastPosition) * mAccumulate;
+
+        /* Translate the accumulation root back to compensate for the move. */
+        mLastPosition += posdiff;
+        mAccumRoot->setPosition(-mLastPosition);
+    }
+    return posdiff;
+}
+
+void Animation::reset(const std::string &start, const std::string &stop)
+{
+    mNextKey = mCurrentKeys->begin();
+
+    while(mNextKey != mCurrentKeys->end() && mNextKey->second != start)
+        mNextKey++;
+    if(mNextKey != mCurrentKeys->end())
+        mCurrentTime = mNextKey->first;
+    else
+    {
+        mNextKey = mCurrentKeys->begin();
+        mCurrentTime = 0.0f;
+    }
+
+    if(stop.length() > 0)
+    {
+        NifOgre::TextKeyMap::const_iterator stopKey = mNextKey;
+        while(stopKey != mCurrentKeys->end() && stopKey->second != stop)
+            stopKey++;
+        if(stopKey != mCurrentKeys->end())
+            mStopTime = stopKey->first;
         else
-            out << "000";
-        out << counter;
-        
-        return out.str();
+            mStopTime = mCurrentAnim->getLength();
     }
-    
-    void Animation::startScript(std::string groupname, int mode, int loops)
+
+    if(mNonAccumRoot)
     {
-        //If groupname is recognized set animate to true
-        //Set the start time and stop time
-        //How many times to loop
-        if(groupname == "all")
+        const Ogre::NodeAnimationTrack *track = 0;
+        Ogre::Animation::NodeTrackIterator trackiter = mCurrentAnim->getNodeTrackIterator();
+        while(!track && trackiter.hasMoreElements())
         {
-            mAnimate = loops;
-            mTime = mStartTime;
+            const Ogre::NodeAnimationTrack *cur = trackiter.getNext();
+            if(cur->getAssociatedNode()->getName() == mNonAccumRoot->getName())
+                track = cur;
         }
-        else if(mTextmappings)
+
+        if(track)
         {
-
-            std::string startName = groupname + ": loop start";
-            std::string stopName = groupname + ": loop stop";
-
-            bool first = false;
-
-            if(loops > 1)
-            {
-                startName = groupname + ": loop start";
-                stopName = groupname + ": loop stop";
-
-                for(std::map<std::string, float>::iterator iter = mTextmappings->begin(); iter != mTextmappings->end(); iter++)
-                {
-
-                    std::string current = iter->first.substr(0, startName.size());
-                    std::transform(current.begin(), current.end(), current.begin(), ::tolower);
-                    std::string current2 = iter->first.substr(0, stopName.size());
-                    std::transform(current2.begin(), current2.end(), current2.begin(), ::tolower);
-
-                    if(current == startName)
-                    {
-                        mStartTime = iter->second;
-                         mAnimate = loops;
-                         mTime = mStartTime;
-                         first = true;
-                    }
-                    if(current2 == stopName)
-                    {
-                        mStopTime = iter->second;
-                        if(first)
-                            break;
-                    }
-                }
-            }
-            if(!first)
-            {
-                startName = groupname + ": start";
-                stopName = groupname + ": stop";
-
-                for(std::map<std::string, float>::iterator iter = mTextmappings->begin(); iter != mTextmappings->end(); iter++)
-                {
-
-                    std::string current = iter->first.substr(0, startName.size());
-                    std::transform(current.begin(), current.end(), current.begin(), ::tolower);
-                    std::string current2 = iter->first.substr(0, stopName.size());
-                    std::transform(current2.begin(), current2.end(), current2.begin(), ::tolower);
-
-                    if(current == startName)
-                    {
-                        mStartTime = iter->second;
-                        mAnimate = loops;
-                        mTime = mStartTime;
-                        first = true;
-                    }
-                    if(current2 == stopName)
-                    {
-                        mStopTime = iter->second;
-                        if(first)
-                            break;
-                    }
-                }
-            }
+            Ogre::TransformKeyFrame kf(0, mCurrentTime);
+            track->getInterpolatedKeyFrame(mCurrentAnim->_getTimeIndex(mCurrentTime), &kf);
+            mLastPosition = kf.getTranslate() * mAccumulate;
         }
     }
-        
-    void Animation::stopScript()
+}
+
+
+bool Animation::handleEvent(float time, const std::string &evt)
+{
+    if(evt == "start" || evt == "loop start")
     {
-        mAnimate = 0;
+        /* Do nothing */
+        return true;
     }
-    
-    void Animation::handleShapes(std::vector<Nif::NiTriShapeCopy>* allshapes, Ogre::Entity* creaturemodel, Ogre::SkeletonInstance *skel)
+
+    if(evt.compare(0, 7, "sound: ") == 0)
     {
-        mShapeNumber = 0;
+        MWBase::SoundManager *sndMgr = MWBase::Environment::get().getSoundManager();
+        sndMgr->playSound3D(mPtr, evt.substr(7), 1.0f, 1.0f);
+        return true;
+    }
+    if(evt.compare(0, 10, "soundgen: ") == 0)
+    {
+        // FIXME: Lookup the SoundGen (SNDG) for the specified sound that corresponds
+        // to this actor type
+        return true;
+    }
 
-        if (allshapes == NULL || creaturemodel == NULL || skel == NULL)
-            return;
-
-        std::vector<Nif::NiTriShapeCopy>::iterator allshapesiter;
-        for(allshapesiter = allshapes->begin(); allshapesiter != allshapes->end(); allshapesiter++)
+    if(evt == "loop stop")
+    {
+        if(mLooping)
         {
-            //std::map<unsigned short, PosAndRot> vecPosRot;
-
-            Nif::NiTriShapeCopy& copy = *allshapesiter;
-            std::vector<Ogre::Vector3>* allvertices = &copy.vertices;
-
-            //std::set<unsigned int> vertices;
-            //std::set<unsigned int> normals;
-            //std::vector<Nif::NiSkinData::BoneInfoCopy> boneinfovector =  copy.boneinfo;
-            std::map<int, std::vector<Nif::NiSkinData::IndividualWeight> >* verticesToChange = &copy.vertsToWeights;
-
-            //std::cout << "Name " << copy.sname << "\n";
-            Ogre::HardwareVertexBufferSharedPtr vbuf = creaturemodel->getMesh()->getSubMesh(copy.sname)->vertexData->vertexBufferBinding->getBuffer(0);
-            Ogre::Real* pReal = static_cast<Ogre::Real*>(vbuf->lock(Ogre::HardwareBuffer::HBL_NORMAL));
-
-
-            std::vector<Ogre::Vector3> initialVertices = copy.morph.getInitialVertices();
-            //Each shape has multiple indices
-            if(initialVertices.size() )
-            {
-                if(copy.vertices.size() == initialVertices.size())
-                {
-                    //Create if it doesn't already exist
-                    if(mShapeIndexI.size() == static_cast<std::size_t> (mShapeNumber))
-                    {
-                        std::vector<int> vec;
-                        mShapeIndexI.push_back(vec);
-                    }
-                    if(mTime >= copy.morph.getStartTime() && mTime <= copy.morph.getStopTime())
-                    {
-                        float x;
-                        for (unsigned int i = 0; i < copy.morph.getAdditionalVertices().size(); i++)
-                        {
-                            int j = 0;
-                            if(mShapeIndexI[mShapeNumber].size() <= i)
-                                mShapeIndexI[mShapeNumber].push_back(0);
-
-                            if(timeIndex(mTime,copy.morph.getRelevantTimes()[i],(mShapeIndexI[mShapeNumber])[i], j, x))
-                            {
-                                int indexI = (mShapeIndexI[mShapeNumber])[i];
-                                std::vector<Ogre::Vector3> relevantData = (copy.morph.getRelevantData()[i]);
-                                float v1 = relevantData[indexI].x;
-                                float v2 = relevantData[j].x;
-                                float t = v1 + (v2 - v1) * x;
-                                
-                                if ( t < 0 )
-                                    t = 0;
-                                if ( t > 1 )
-                                    t = 1;
-                                if( t != 0 && initialVertices.size() == copy.morph.getAdditionalVertices()[i].size())
-                                    for (unsigned int v = 0; v < initialVertices.size(); v++)
-                                        initialVertices[v] += ((copy.morph.getAdditionalVertices()[i])[v]) * t;
-                            }
-
-                        }
-
-                        allvertices = &initialVertices;
-                    }
-                    mShapeNumber++;
-                }
-            }
-
-
-            if(verticesToChange->size() > 0)
-            {
-
-                for(std::map<int, std::vector<Nif::NiSkinData::IndividualWeight> >::iterator iter = verticesToChange->begin();
-                    iter != verticesToChange->end(); iter++)
-                {
-                    std::vector<Nif::NiSkinData::IndividualWeight> inds = iter->second;
-                    int verIndex = iter->first;
-                    Ogre::Vector3 currentVertex = (*allvertices)[verIndex];
-                    Nif::NiSkinData::BoneInfoCopy* boneinfocopy = &(allshapesiter->boneinfo[inds[0].boneinfocopyindex]);
-                    Ogre::Bone *bonePtr = 0;
-
-                    Ogre::Vector3 vecPos;
-                    Ogre::Quaternion vecRot;
-                    std::map<Nif::NiSkinData::BoneInfoCopy*, PosAndRot>::iterator result = mVecRotPos.find(boneinfocopy);
-
-                    if(result == mVecRotPos.end())
-                    {
-                        bonePtr = skel->getBone(boneinfocopy->bonename);
-
-                        vecPos = bonePtr->_getDerivedPosition() + bonePtr->_getDerivedOrientation() * boneinfocopy->trafo.trans;
-                        vecRot = bonePtr->_getDerivedOrientation() * boneinfocopy->trafo.rotation;
-
-                        PosAndRot both;
-                        both.vecPos = vecPos;
-                        both.vecRot = vecRot;
-                        mVecRotPos[boneinfocopy] = both;
-
-                    }
-                    else
-                    {
-                        PosAndRot both = result->second;
-                        vecPos = both.vecPos;
-                        vecRot = both.vecRot;
-                    }
-
-                    Ogre::Vector3 absVertPos = (vecPos + vecRot * currentVertex) * inds[0].weight;
-
-                    for(std::size_t i = 1; i < inds.size(); i++)
-                    {
-                        boneinfocopy = &(allshapesiter->boneinfo[inds[i].boneinfocopyindex]);
-                        result = mVecRotPos.find(boneinfocopy);
-
-                        if(result == mVecRotPos.end())
-                        {
-                            bonePtr = skel->getBone(boneinfocopy->bonename);
-                            vecPos = bonePtr->_getDerivedPosition() + bonePtr->_getDerivedOrientation() * boneinfocopy->trafo.trans;
-                            vecRot = bonePtr->_getDerivedOrientation() * boneinfocopy->trafo.rotation;
-
-                            PosAndRot both;
-                            both.vecPos = vecPos;
-                            both.vecRot = vecRot;
-                            mVecRotPos[boneinfocopy] = both;
-
-                        }
-                        else
-                        {
-                            PosAndRot both = result->second;
-                            vecPos = both.vecPos;
-                            vecRot = both.vecRot;
-                        }
-
-                        absVertPos += (vecPos + vecRot * currentVertex) * inds[i].weight;
-
-                    }
-                    Ogre::Real* addr = (pReal + 3 * verIndex);
-                    *addr = absVertPos.x;
-                    *(addr+1) = absVertPos.y;
-                    *(addr+2) = absVertPos.z;
-
-                }
-            }
-            else
-            {
-                //Ogre::Bone *bonePtr = creaturemodel->getSkeleton()->getBone(copy.bonename);
-                Ogre::Quaternion shaperot = copy.trafo.rotation;
-                Ogre::Vector3 shapetrans = copy.trafo.trans;
-                float shapescale = copy.trafo.scale;
-                std::vector<std::string> boneSequence = copy.boneSequence;
-
-                Ogre::Vector3 transmult;
-                Ogre::Quaternion rotmult;
-                float scale;
-                if(boneSequence.size() > 0)
-                {
-                    std::vector<std::string>::iterator boneSequenceIter = boneSequence.begin();
-                    if(skel->hasBone(*boneSequenceIter))
-                    {
-                        Ogre::Bone *bonePtr = skel->getBone(*boneSequenceIter);
-
-                        transmult = bonePtr->getPosition();
-                        rotmult = bonePtr->getOrientation();
-                        scale = bonePtr->getScale().x;
-                        boneSequenceIter++;
-
-                        for(; boneSequenceIter != boneSequence.end(); boneSequenceIter++)
-                        {
-                            if(skel->hasBone(*boneSequenceIter))
-                            {
-                                Ogre::Bone *bonePtr = skel->getBone(*boneSequenceIter);
-                                // Computes C = B + AxC*scale
-                                transmult = transmult + rotmult * bonePtr->getPosition();
-                                rotmult = rotmult * bonePtr->getOrientation();
-                                scale = scale * bonePtr->getScale().x;
-                            }
-                            //std::cout << "Bone:" << *boneSequenceIter << "   ";
-                        }
-                        transmult = transmult + rotmult * shapetrans;
-                        rotmult = rotmult * shaperot;
-                        scale = shapescale * scale;
-
-                        //std::cout << "Position: " << transmult << "Rotation: " << rotmult << "\n";
-                    }
-                }
-                else
-                {
-                    transmult = shapetrans;
-                    rotmult = shaperot;
-                    scale = shapescale;
-                }
-
-                // Computes C = B + AxC*scale
-                // final_vector = old_vector + old_rotation*new_vector*old_scale/
-
-                for(unsigned int i = 0; i < allvertices->size(); i++)
-                {
-                    Ogre::Vector3 current = transmult + rotmult * (*allvertices)[i];
-                    Ogre::Real* addr = pReal + i * 3;
-                    *addr = current.x;
-                    *(addr+1) = current.y;
-                    *(addr + 2) = current.z;
-
-                }/*
-                for(int i = 0; i < allnormals.size(); i++){
-                    Ogre::Vector3 current =rotmult * allnormals[i];
-                    Ogre::Real* addr = pRealNormal + i * 3;
-                    *addr = current.x;
-                    *(addr+1) = current.y;
-                    *(addr + 2) = current.z;
-
-                }*/
-
-            }
-            vbuf->unlock();
+            reset("loop start", "");
+            if(mCurrentTime >= time)
+                return false;
         }
-    
+        return true;
     }
-        
-    bool Animation::timeIndex( float time, const std::vector<float> & times, int & i, int & j, float & x )
+    if(evt == "stop")
     {
-        int count;
-        if (  (count = times.size()) > 0 )
+        if(mLooping)
         {
-            if ( time <= times[0] )
-            {
-                i = j = 0;
-                x = 0.0;
-                return true;
-            }
-            if ( time >= times[count - 1] )
-            {
-                i = j = count - 1;
-                x = 0.0;
-                return true;
-            }
+            reset("loop start", "");
+            if(mCurrentTime >= time)
+                return false;
+            return true;
+        }
+        // fall-through
+    }
+    if(mController)
+        mController->markerEvent(time, evt);
+    return true;
+}
 
-            if ( i < 0 || i >= count )
-                i = 0;
 
-            float tI = times[i];
-            if ( time > tI )
+void Animation::play(const std::string &groupname, const std::string &start, const std::string &stop, bool loop)
+{
+    try {
+        bool found = false;
+        /* Look in reverse; last-inserted source has priority. */
+        for(std::vector<Ogre::SkeletonPtr>::const_reverse_iterator iter(mSkeletonSources.rbegin());iter != mSkeletonSources.rend();iter++)
+        {
+            if((*iter)->hasAnimation(groupname))
             {
-                j = i + 1;
-                float tJ;
-                while ( time >= ( tJ = times[j]) )
-                {
-                    i = j++;
-                    tI = tJ;
-                }
-                x = ( time - tI ) / ( tJ - tI );
-                return true;
-            }
-            else if ( time < tI )
-            {
-                j = i - 1;
-                float tJ;
-                while ( time <= ( tJ = times[j] ) )
-                {
-                    i = j--;
-                    tI = tJ;
-                }
-                x = ( time - tI ) / ( tJ - tI );
-                return true;
-            }
-            else
-            {
-                j = i;
-                x = 0.0;
-                return true;
+                mCurrentAnim = (*iter)->getAnimation(groupname);
+                mCurrentKeys = &mTextKeys[groupname];
+                mAnimVelocity = 0.0f;
+
+                if(mNonAccumRoot)
+                    calcAnimVelocity();
+
+                found = true;
+                break;
             }
         }
-        else
-            return false;
+        if(!found)
+            throw std::runtime_error("Failed to find animation "+groupname);
 
+        reset(start, stop);
+        setLooping(loop);
+        mPlaying = true;
     }
+    catch(std::exception &e) {
+        std::cerr<< e.what() <<std::endl;
+    }
+}
 
-    void Animation::handleAnimationTransforms()
+Ogre::Vector3 Animation::runAnimation(float timepassed)
+{
+    Ogre::Vector3 movement = Ogre::Vector3::ZERO;
+
+    timepassed *= mAnimSpeedMult;
+    while(mCurrentAnim && mPlaying)
     {
-        Ogre::SkeletonInstance* skel = mBase->getSkeleton();
-
-        Ogre::Bone* b = skel->getRootBone();
-        b->setOrientation(Ogre::Real(.3),Ogre::Real(.3),Ogre::Real(.3), Ogre::Real(.3));   //This is a trick
-
-        skel->_updateTransforms();
-        //skel->_notifyManualBonesDirty();
-
-        mBase->getAllAnimationStates()->_notifyDirty();
-        //mBase->_updateAnimation();
-        //mBase->_notifyMoved();
-
-        std::vector<Nif::NiKeyframeData>::iterator iter;
-        int slot = 0;
-        if(mTransformations)
+        float targetTime = std::min(mStopTime, mCurrentTime+timepassed);
+        if(mNextKey == mCurrentKeys->end() || mNextKey->first > targetTime)
         {
-            for(iter = mTransformations->begin(); iter != mTransformations->end(); iter++)
-            {
-                if(mTime < iter->getStartTime() || mTime < mStartTime || mTime > iter->getStopTime())
-                {
-                    slot++;
-                    continue;
-                }
-
-                float x;
-                float x2;
-
-                const std::vector<Ogre::Quaternion> & quats = iter->getQuat();
-
-                const std::vector<float> & ttime = iter->gettTime();
-                const std::vector<float> & rtime = iter->getrTime();
-                int rindexJ = mRindexI[slot];
-
-                timeIndex(mTime, rtime, mRindexI[slot], rindexJ, x2);
-                int tindexJ = mTindexI[slot];
-
-                const std::vector<Ogre::Vector3> & translist1 = iter->getTranslist1();
-
-                timeIndex(mTime, ttime, mTindexI[slot], tindexJ, x);
-
-                Ogre::Vector3 t;
-                Ogre::Quaternion r;
-
-                bool bTrans = translist1.size() > 0;
-
-                bool bQuats = quats.size() > 0;
-
-                if(skel->hasBone(iter->getBonename()))
-                {
-                    Ogre::Bone* bone = skel->getBone(iter->getBonename());
-                    
-                    if(bTrans)
-                    {
-                        Ogre::Vector3 v1 = translist1[mTindexI[slot]];
-                        Ogre::Vector3 v2 = translist1[tindexJ];
-                        t = (v1 + (v2 - v1) * x);
-                        bone->setPosition(t);
-
-                    }
-                    
-                    if(bQuats)
-                    {
-                        r = Ogre::Quaternion::Slerp(x2, quats[mRindexI[slot]], quats[rindexJ], true);
-                        bone->setOrientation(r);
-                    }
-
-                }
-
-                slot++;
-            }
-            skel->_updateTransforms();
-            mBase->getAllAnimationStates()->_notifyDirty();
+            movement += updatePosition(targetTime);
+            mPlaying = (mLooping || mStopTime > targetTime);
+            break;
         }
+
+        float time = mNextKey->first;
+        const std::string &evt = mNextKey->second;
+        mNextKey++;
+
+        movement += updatePosition(time);
+        mPlaying = (mLooping || mStopTime > time);
+
+        timepassed = targetTime - time;
+
+        if(!handleEvent(time, evt))
+            break;
     }
+
+    return movement;
+}
 
 }

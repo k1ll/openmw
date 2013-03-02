@@ -3,24 +3,21 @@
 
 #include <QWidget>
 #include <QModelIndex>
-
+#include "utils/profilescombobox.hpp"
 #include <components/files/collections.hpp>
 
-#include "combobox.hpp"
 
-class QTableWidget;
-class QStandardItemModel;
-class QItemSelection;
-class QItemSelectionModel;
+class QTableView;
 class QSortFilterProxyModel;
-class QStringListModel;
 class QSettings;
 class QAction;
 class QToolBar;
 class QMenu;
-class PluginsModel;
-class PluginsView;
-class ComboBox;
+class ProfilesComboBox;
+class DataFilesModel;
+
+class TextInputDialog;
+class DataFilesList;
 
 namespace Files { struct ConfigurationManager; }
 
@@ -31,54 +28,37 @@ class DataFilesPage : public QWidget
 public:
     DataFilesPage(Files::ConfigurationManager& cfg, QWidget *parent = 0);
 
-    ComboBox *mProfilesComboBox;
+    ProfilesComboBox *mProfilesComboBox;
 
     void writeConfig(QString profile = QString());
+    bool showDataFilesWarning();
     bool setupDataFiles();
 
 public slots:
-    void masterSelectionChanged(const QItemSelection &selected, const QItemSelection &deselected);
-    void setCheckState(QModelIndex index);
-
-    void filterChanged(const QString filter);
-    void showContextMenu(const QPoint &point);
     void profileChanged(const QString &previous, const QString &current);
+    void profileRenamed(const QString &previous, const QString &current);
+    void updateOkButton(const QString &text);
 
     // Action slots
     void newProfile();
-    void copyProfile();
     void deleteProfile();
-    void moveUp();
-    void moveDown();
-    void moveTop();
-    void moveBottom();
-    void check();
-    void uncheck();
-    void refresh();
+//    void moveUp();
+//    void moveDown();
+//    void moveTop();
+//    void moveBottom();
 
 private:
-    QTableWidget *mMastersWidget;
-    PluginsView *mPluginsTable;
-
-    QStandardItemModel *mDataFilesModel;
-    PluginsModel *mPluginsModel;
-
-    QSortFilterProxyModel *mPluginsProxyModel;
-    QItemSelectionModel *mPluginsSelectModel;
+    DataFilesList *mDataFilesList;
 
     QToolBar *mProfileToolBar;
-    QMenu *mContextMenu;
 
     QAction *mNewProfileAction;
-    QAction *mCopyProfileAction;
     QAction *mDeleteProfileAction;
 
-    QAction *mMoveUpAction;
-    QAction *mMoveDownAction;
-    QAction *mMoveTopAction;
-    QAction *mMoveBottomAction;
-    QAction *mCheckAction;
-    QAction *mUncheckAction;
+//    QAction *mMoveUpAction;
+//    QAction *mMoveDownAction;
+//    QAction *mMoveTopAction;
+//    QAction *mMoveBottomAction;
 
     Files::ConfigurationManager &mCfgMgr;
     Files::PathContainer mDataDirs;
@@ -86,16 +66,14 @@ private:
 
     QSettings *mLauncherConfig;
 
-    const QStringList checkedPlugins();
-    const QStringList selectedMasters();
+    TextInputDialog *mNewProfileDialog;
 
-    void addPlugins(const QModelIndex &index);
-    void removePlugins(const QModelIndex &index);
-    void uncheckPlugins();
+//    const QStringList checkedPlugins();
+//    const QStringList selectedMasters();
+
     void createActions();
     void setupConfig();
     void readConfig();
-    void scrollToSelection();
 
 };
 

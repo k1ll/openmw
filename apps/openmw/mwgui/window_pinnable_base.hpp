@@ -10,20 +10,19 @@ namespace MWGui
     class WindowPinnableBase: public WindowBase
     {
     public:
-        WindowPinnableBase(const std::string& parLayout, WindowManager& parWindowManager);
-        void setVisible(bool b);
+        WindowPinnableBase(const std::string& parLayout, MWBase::WindowManager& parWindowManager);
         bool pinned() { return mPinned; }
 
     private:
-        void onWindowButtonPressed(MyGUI::Window* sender, const std::string& eventName);
-        
+        void onPinButtonClicked(MyGUI::Widget* _sender);
+
     protected:
         virtual void onPinToggled() = 0;
 
+        MyGUI::Widget* mPinButton;
         bool mPinned;
         bool mVisible;
     };
 }
 
 #endif
-

@@ -2,11 +2,11 @@
 #include "console.hpp"
 
 #include <algorithm>
-
-#include <components/esm_store/reclists.hpp>
-#include <components/esm_store/store.hpp>
+#include <fstream>
 
 #include <components/compiler/exception.hpp>
+
+#include "../mwworld/esmstore.hpp"
 
 #include "../mwscript/extensions.hpp"
 
@@ -92,12 +92,12 @@ namespace MWGui
             scanner.listKeywords (mNames);
 
             // identifier
-            const ESMS::ESMStore& store = MWBase::Environment::get().getWorld()->getStore();
+            const MWWorld::ESMStore& store =
+                MWBase::Environment::get().getWorld()->getStore();
 
-            for (ESMS::RecListList::const_iterator iter (store.recLists.begin());
-                iter!=store.recLists.end(); ++iter)
+            for (MWWorld::ESMStore::iterator it = store.begin(); it != store.end(); ++it)
             {
-                iter->second->listIdentifier (mNames);
+                it->second->listIdentifier (mNames);
             }
 
             // sort
@@ -105,9 +105,10 @@ namespace MWGui
         }
     }
 
-    Console::Console(int w, int h, const Compiler::Extensions& extensions, int tabCompletionMode)
+    Console::Console(int w, int h, bool consoleOnlyScripts, int tabCompletionMode)
       : Layout("openmw_console.layout"),
         mCompilerContext (MWScript::CompilerContext::Type_Console),
+        mConsoleOnlyScripts (consoleOnlyScripts),
         mCompletionMode(tabCompletionMode),
         mPagesize(5),
         mCaseSensitive(false)
@@ -129,7 +130,8 @@ namespace MWGui
         history->setVisibleVScroll(true);
 
         // compiler
-        mCompilerContext.setExtensions (&extensions);
+        MWScript::registerExtensions (mExtensions, mConsoleOnlyScripts);
+        mCompilerContext.setExtensions (&mExtensions);
     }
 
     void Console::enable()
@@ -174,6 +176,47 @@ namespace MWGui
     void Console::printError(const std::string &msg)
     {
         print("#FF2222" + msg + "\n");
+    }
+
+    void Console::execute (const std::string& command)
+    {
+        // Log the command
+        print("#FFFFFF> " + command + "\n");
+
+        Compiler::Locals locals;
+        Compiler::Output output (locals);
+
+        if (compile (command + "\n", output))
+        {
+            try
+            {
+                ConsoleInterpreterContext interpreterContext (*this, mPtr);
+                Interpreter::Interpreter interpreter;
+                MWScript::installOpcodes (interpreter, mConsoleOnlyScripts);
+                std::vector<Interpreter::Type_Code> code;
+                output.getCode (code);
+                interpreter.run (&code[0], code.size(), interpreterContext);
+            }
+            catch (const std::exception& error)
+            {
+                printError (std::string ("An exception has been thrown: ") + error.what());
+            }
+        }
+    }
+
+    void Console::executeFile (const std::string& path)
+    {
+        std::ifstream stream (path.c_str());
+
+        if (!stream.is_open())
+            printError ("failed to open file: " + path);
+        else
+        {
+            std::string line;
+
+            while (std::getline (stream, line))
+                execute (line);
+        }
     }
 
     void Console::keyPress(MyGUI::WidgetPtr _sender,
@@ -264,28 +307,7 @@ namespace MWGui
         current = command_history.end();
         editString.clear();
 
-        // Log the command
-        print("#FFFFFF> " + cm + "\n");
-
-        Compiler::Locals locals;
-        Compiler::Output output (locals);
-
-        if (compile (cm + "\n", output))
-        {
-            try
-            {
-                ConsoleInterpreterContext interpreterContext (*this, mPtr);
-                Interpreter::Interpreter interpreter;
-                MWScript::installOpcodes (interpreter);
-                std::vector<Interpreter::Type_Code> code;
-                output.getCode (code);
-                interpreter.run (&code[0], code.size(), interpreterContext);
-            }
-            catch (const std::exception& error)
-            {
-                printError (std::string ("An exception has been thrown: ") + error.what());
-            }
-        }
+        execute (cm);
 
         command->setCaption("");
     }
@@ -464,7 +486,7 @@ namespace MWGui
     {
         mPtr = object;
         if (!mPtr.isEmpty())
-            setTitle("#{sConsoleTitle} (" + mPtr.getCellRef().refID + ")");
+            setTitle("#{sConsoleTitle} (" + mPtr.getCellRef().mRefID + ")");
         else
             setTitle("#{sConsoleTitle}");
         MyGUI::InputManager::getInstance().setKeyFocusWidget(command);

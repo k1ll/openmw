@@ -3,17 +3,21 @@
 #include <boost/lexical_cast.hpp>
 
 #include "../mwbase/environment.hpp"
-#include "../mwinput/inputmanager.hpp"
-#include "../mwsound/soundmanager.hpp"
+#include "../mwbase/world.hpp"
+#include "../mwbase/soundmanager.hpp"
+#include "../mwbase/windowmanager.hpp"
+
 #include "../mwworld/actiontake.hpp"
+#include "../mwworld/player.hpp"
 
 #include "formatting.hpp"
-#include "window_manager.hpp"
 
 using namespace MWGui;
 
-BookWindow::BookWindow (WindowManager& parWindowManager) :
-    WindowBase("openmw_book.layout", parWindowManager)
+BookWindow::BookWindow (MWBase::WindowManager& parWindowManager)
+    : WindowBase("openmw_book.layout", parWindowManager)
+    , mTakeButtonShow(true)
+    , mTakeButtonAllowed(true)
 {
     getWidget(mCloseButton, "CloseButton");
     mCloseButton->eventMouseButtonClick += MyGUI::newDelegate(this, &BookWindow::onCloseButtonClicked);
@@ -58,7 +62,7 @@ void BookWindow::open (MWWorld::Ptr book)
     MWWorld::LiveCellRef<ESM::Book> *ref = mBook.get<ESM::Book>();
 
     BookTextParser parser;
-    std::vector<std::string> results = parser.split(ref->base->text, mLeftPage->getSize().width, mLeftPage->getSize().height);
+    std::vector<std::string> results = parser.split(ref->mBase->mText, mLeftPage->getSize().width, mLeftPage->getSize().height);
 
     int i=0;
     for (std::vector<std::string>::iterator it=results.begin();
@@ -83,10 +87,17 @@ void BookWindow::open (MWWorld::Ptr book)
 
 void BookWindow::setTakeButtonShow(bool show)
 {
-    mTakeButton->setVisible(show);
+    mTakeButtonShow = show;
+    mTakeButton->setVisible(mTakeButtonShow && mTakeButtonAllowed);
 }
 
-void BookWindow::onCloseButtonClicked (MyGUI::Widget* _sender)
+void BookWindow::setInventoryAllowed(bool allowed)
+{
+    mTakeButtonAllowed = allowed;
+    mTakeButton->setVisible(mTakeButtonShow && mTakeButtonAllowed);
+}
+
+void BookWindow::onCloseButtonClicked (MyGUI::Widget* sender)
 {
     // no 3d sounds because the object could be in a container.
     MWBase::Environment::get().getSoundManager()->playSound ("book close", 1.0, 1.0);
@@ -94,17 +105,17 @@ void BookWindow::onCloseButtonClicked (MyGUI::Widget* _sender)
     mWindowManager.removeGuiMode(GM_Book);
 }
 
-void BookWindow::onTakeButtonClicked (MyGUI::Widget* _sender)
+void BookWindow::onTakeButtonClicked (MyGUI::Widget* sender)
 {
-    MWBase::Environment::get().getSoundManager()->playSound ("Item Book Up", 1.0, 1.0, MWSound::Play_NoTrack);
+    MWBase::Environment::get().getSoundManager()->playSound ("Item Book Up", 1.0, 1.0, MWBase::SoundManager::Play_NoTrack);
 
     MWWorld::ActionTake take(mBook);
-    take.execute();
+    take.execute (MWBase::Environment::get().getWorld()->getPlayer().getPlayer());
 
     mWindowManager.removeGuiMode(GM_Book);
 }
 
-void BookWindow::onNextPageButtonClicked (MyGUI::Widget* _sender)
+void BookWindow::onNextPageButtonClicked (MyGUI::Widget* sender)
 {
     if ((mCurrentPage+1)*2 < mPages.size())
     {
@@ -116,7 +127,7 @@ void BookWindow::onNextPageButtonClicked (MyGUI::Widget* _sender)
     }
 }
 
-void BookWindow::onPrevPageButtonClicked (MyGUI::Widget* _sender)
+void BookWindow::onPrevPageButtonClicked (MyGUI::Widget* sender)
 {
     if (mCurrentPage > 0)
     {

@@ -15,6 +15,11 @@ namespace ESM
     struct EffectList;
 }
 
+namespace MWWorld
+{
+    class Ptr;
+}
+
 namespace MWMechanics
 {
     /// \brief Lasting spell effects
@@ -36,20 +41,25 @@ namespace MWMechanics
             mutable MWWorld::TimeStamp mLastUpdate;
 
             void update() const;
+            
+            void rebuildEffects() const;
 
-            const ESM::EffectList& getEffectList (const std::string& id) const;
+            std::pair<ESM::EffectList, bool> getEffectList (const std::string& id) const;
 
         public:
 
             ActiveSpells();
 
-            bool addSpell (const std::string& id);
+            bool addSpell (const std::string& id, const MWWorld::Ptr& actor);
             ///< Overwrites an existing spell with the same ID. If the spell does not have any
             /// non-instant effects, it is ignored.
             ///
             /// \return Has the spell been added?
 
             void removeSpell (const std::string& id);
+
+            bool isSpellActive (std::string id) const;
+            ///< case insensitive
 
             const MagicEffects& getMagicEffects() const;
 

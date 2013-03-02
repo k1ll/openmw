@@ -21,7 +21,7 @@ namespace MWRender
 
 namespace MWMechanics
 {
-    struct CreatureStats;
+    class CreatureStats;
     class NpcStats;
     struct Movement;
 }
@@ -31,12 +31,18 @@ namespace MWGui
     struct ToolTipInfo;
 }
 
+namespace ESM
+{
+    struct Position;
+}
+
 namespace MWWorld
 {
     class Ptr;
     class ContainerStore;
     class InventoryStore;
     class PhysicsSystem;
+    class CellStore;
 
     /// \brief Base class for referenceable esm records
     class Class
@@ -50,6 +56,8 @@ namespace MWWorld
         protected:
 
             Class();
+
+            virtual Ptr copyToCellImpl(const Ptr &ptr, CellStore &cell) const;
 
         public:
 
@@ -132,6 +140,9 @@ namespace MWWorld
             virtual float getSpeed (const Ptr& ptr) const;
             ///< Return movement speed.
 
+            virtual float getJump(const MWWorld::Ptr &ptr) const;
+            ///< Return jump velocity (not accounting for movement)
+
             virtual MWMechanics::Movement& getMovementSettings (const Ptr& ptr) const;
             ///< Return desired movement.
 
@@ -178,6 +189,16 @@ namespace MWWorld
             ///
             /// (default implementations: throws an exception)
 
+            virtual bool isEssential (const MWWorld::Ptr& ptr) const;
+            ///< Is \a ptr essential? (i.e. may losing \a ptr make the game unwinnable)
+            ///
+            /// (default implementation: return false)
+
+            virtual bool hasDetected (const MWWorld::Ptr& ptr, const MWWorld::Ptr& ptr2) const;
+            ///< Has \æ ptr detected \a ptr2?
+            ///
+            /// (default implementation: return false)
+
             static const Class& get (const std::string& key);
             ///< If there is no class for this \a key, an exception is thrown.
 
@@ -204,6 +225,19 @@ namespace MWWorld
             virtual void adjustScale(const MWWorld::Ptr& ptr,float& scale) const;
 
             virtual void adjustRotation(const MWWorld::Ptr& ptr,float& x,float& y,float& z) const;
+
+            virtual std::string getModel(const MWWorld::Ptr &ptr) const;
+
+            virtual Ptr
+            copyToCell(const Ptr &ptr, CellStore &cell) const;
+
+            virtual Ptr
+            copyToCell(const Ptr &ptr, CellStore &cell, const ESM::Position &pos) const;
+            
+            virtual bool
+            isActor() const {
+                return false;
+            }
     };
 }
 

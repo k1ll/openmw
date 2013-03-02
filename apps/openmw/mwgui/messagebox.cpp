@@ -1,8 +1,12 @@
+#include <components/misc/stringops.hpp>
+
 #include "messagebox.hpp"
+#include "../mwbase/environment.hpp"
+#include "../mwbase/soundmanager.hpp"
 
 using namespace MWGui;
 
-MessageBoxManager::MessageBoxManager (WindowManager *windowManager)
+MessageBoxManager::MessageBoxManager (MWBase::WindowManager *windowManager)
 {
     mWindowManager = windowManager;
     // defines
@@ -133,6 +137,10 @@ void MessageBoxManager::setMessageBoxSpeed (int speed)
     mMessageBoxSpeed = speed;
 }
 
+void MessageBoxManager::enterPressed ()
+{
+    mInterMessageBoxe->enterPressed();
+}
 
 int MessageBoxManager::readPressedButton ()
 {
@@ -359,7 +367,29 @@ InteractiveMessageBox::InteractiveMessageBox(MessageBoxManager& parMessageBoxMan
     }
 }
 
+void InteractiveMessageBox::enterPressed()
+{
+    
+    std::string ok = Misc::StringUtils::lowerCase(MyGUI::LanguageManager::getInstance().replaceTags("#{sOK}"));
+    std::vector<MyGUI::ButtonPtr>::const_iterator button;
+    for(button = mButtons.begin(); button != mButtons.end(); ++button)
+    {
+        if(Misc::StringUtils::lowerCase((*button)->getCaption()) == ok)
+        {
+            buttonActivated(*button);
+            MWBase::Environment::get().getSoundManager()->playSound("Menu Click", 1.f, 1.f);
+            break;
+        }
+    }
+
+}
+
 void InteractiveMessageBox::mousePressed (MyGUI::Widget* pressed)
+{
+    buttonActivated (pressed);
+}
+
+void InteractiveMessageBox::buttonActivated (MyGUI::Widget* pressed)
 {
     mMarkedToDelete = true;
     int index = 0;

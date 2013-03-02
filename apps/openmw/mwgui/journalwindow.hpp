@@ -7,18 +7,16 @@
 #include <utility>
 
 #include "window_base.hpp"
+#include "imagebutton.hpp"
 
 namespace MWGui
 {
-    class WindowManager;
-
     class JournalWindow : public WindowBase
     {
         public:
-            JournalWindow(WindowManager& parWindowManager);
-            void open();
-
-            virtual void setVisible(bool visible); // only used to play close sound
+            JournalWindow(MWBase::WindowManager& parWindowManager);
+            virtual void open();
+            virtual void close();
 
         private:
             void displayLeftText(std::string text);
@@ -28,22 +26,16 @@ namespace MWGui
             /**
             *Called when next/prev button is used.
             */
-            void notifyNextPage(MyGUI::WidgetPtr _sender);
-            void notifyPrevPage(MyGUI::WidgetPtr _sender);
+            void notifyNextPage(MyGUI::Widget* _sender);
+            void notifyPrevPage(MyGUI::Widget* _sender);
 
-            static const int sLineHeight;
-
-            MyGUI::WidgetPtr mSkillAreaWidget, mSkillClientWidget;
-            MyGUI::ScrollBar* mSkillScrollerWidget;
-            int mLastPos, mClientHeight;
             MyGUI::EditPtr mLeftTextWidget;
             MyGUI::EditPtr mRightTextWidget;
-            MyGUI::ButtonPtr mPrevBtn;
-            MyGUI::ButtonPtr mNextBtn;
+            MWGui::ImageButton* mPrevBtn;
+            MWGui::ImageButton* mNextBtn;
             std::vector<std::string> mLeftPages;
             std::vector<std::string> mRightPages;
             int mPageNumber; //store the number of the current left page
-            bool mVisible;
     };
 
 }

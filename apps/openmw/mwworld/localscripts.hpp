@@ -6,14 +6,11 @@
 
 #include "ptr.hpp"
 
-namespace ESMS
-{
-    struct ESMStore;
-}
-
 namespace MWWorld
 {
+    struct ESMStore;
     class CellStore;
+    class RefData;
 
     /// \brief List of active local scripts
     class LocalScripts
@@ -21,11 +18,11 @@ namespace MWWorld
             std::list<std::pair<std::string, Ptr> > mScripts;
             std::list<std::pair<std::string, Ptr> >::iterator mIter;
             MWWorld::Ptr mIgnore;
-            const ESMS::ESMStore& mStore;
+            const MWWorld::ESMStore& mStore;
 
         public:
 
-            LocalScripts (const ESMS::ESMStore& store);
+            LocalScripts (const MWWorld::ESMStore& store);
 
             void setIgnore (const Ptr& ptr);
             ///< Mark a single reference for ignoring during iteration over local scripts (will revoke
@@ -51,6 +48,8 @@ namespace MWWorld
 
             void clearCell (CellStore *cell);
             ///< Remove all scripts belonging to \a cell.
+            
+            void remove (RefData *ref);
 
             void remove (const Ptr& ptr);
             ///< Remove script for given reference (ignored if reference does not have a scirpt listed).

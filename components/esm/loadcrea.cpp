@@ -1,46 +1,56 @@
 #include "loadcrea.hpp"
 
+#include "esmreader.hpp"
+#include "esmwriter.hpp"
+
 namespace ESM {
 
-void Creature::load(ESMReader &esm, const std::string& id)
+void Creature::load(ESMReader &esm)
 {
-    mId = id;
+    mModel = esm.getHNString("MODL");
+    mOriginal = esm.getHNOString("CNAM");
+    mName = esm.getHNOString("FNAM");
+    mScript = esm.getHNOString("SCRI");
 
-    model = esm.getHNString("MODL");
-    original = esm.getHNOString("CNAM");
-    name = esm.getHNOString("FNAM");
-    script = esm.getHNOString("SCRI");
+    esm.getHNT(mData, "NPDT", 96);
 
-    esm.getHNT(data, "NPDT", 96);
+    esm.getHNT(mFlags, "FLAG");
+    mScale = 1.0;
+    esm.getHNOT(mScale, "XSCL");
 
-    esm.getHNT(flags, "FLAG");
-    scale = 1.0;
-    esm.getHNOT(scale, "XSCL");
-
-    inventory.load(esm);
+    mInventory.load(esm);
+    mSpells.load(esm);
 
     if (esm.isNextSub("AIDT"))
     {
-        esm.getHExact(&AI, sizeof(AI));
-        hasAI = true;
+        esm.getHExact(&mAiData, sizeof(mAiData));
+        mHasAI = true;
     }
     else
-        hasAI = false;
+        mHasAI = false;
 
-    // More subrecords:
-    // AI_W - wander (14 bytes, i don't understand it)
-    //    short distance
-    //    byte duration
-    //    byte timeOfDay
-    //    byte idle[10]
-    //
-    // Rest is optional:
-    // AI_T - travel?
-    // AI_F - follow?
-    // AI_E - escort?
-    // AI_A - activate?
+    mAiPackage.load(esm);
     esm.skipRecord();
+}
 
+void Creature::save(ESMWriter &esm)
+{
+    esm.writeHNCString("MODL", mModel);
+    esm.writeHNOCString("CNAM", mOriginal);
+    esm.writeHNOCString("FNAM", mName);
+    esm.writeHNOCString("SCRI", mScript);
+    esm.writeHNT("NPDT", mData, 96);
+    esm.writeHNT("FLAG", mFlags);
+    if (mScale != 1.0) {
+        esm.writeHNT("XSCL", mScale);
+    }
+
+    mInventory.save(esm);
+    mSpells.save(esm);
+    if (mHasAI) {
+        esm.writeHNT("AIDT", mAiData, sizeof(mAiData));
+    }
+    mAiPackage.save(esm);
 }
 
 }

@@ -15,35 +15,34 @@ include (OpenMWMacros)
 # Version
 
 set (OPENMW_VERSION_MAJOR 0)
-set (OPENMW_VERSION_MINOR 16)
+set (OPENMW_VERSION_MINOR 21)
 set (OPENMW_VERSION_RELEASE 0)
 
 set (OPENMW_VERSION "${OPENMW_VERSION_MAJOR}.${OPENMW_VERSION_MINOR}.${OPENMW_VERSION_RELEASE}")
-
-# Debug suffix for plugins
-set(DEBUG_SUFFIX "")
-if (DEFINED CMAKE_BUILD_TYPE)
-    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-        set(DEBUG_SUFFIX "_d")
-    endif()
-endif()
 
 # doxygen main page
 
 configure_file ("${OpenMW_SOURCE_DIR}/Docs/mainpage.hpp.cmake" "${OpenMW_SOURCE_DIR}/Docs/mainpage.hpp")
 
 option(MYGUI_STATIC "Link static build of Mygui into the binaries" FALSE)
-option(OGRE_STATIC "Link static build of Ogre and Ogre Plugins into the binaries" FALSE)
+option(OGRE_STATIC  "Link static build of Ogre and Ogre Plugins into the binaries" FALSE)
+option(BOOST_STATIC "Link static build of Boost into the binaries" FALSE)
 
 # Apps and tools
 option(BUILD_ESMTOOL "build ESM inspector" ON)
 option(BUILD_LAUNCHER "build Launcher" ON)
 option(BUILD_MWINIIMPORTER "build MWiniImporter" ON)
+option(BUILD_OPENCS "build OpenMW Construction Set" ON)
+option(BUILD_WITH_CODE_COVERAGE "Enable code coverage with gconv" OFF)
+option(BUILD_UNITTESTS "Enable Unittests with Google C++ Unittest ang GMock frameworks" OFF)
 
 # Sound source selection
-option(USE_FFMPEG "use ffmpeg for sound" OFF)
-option(USE_AUDIERE "use audiere for sound" OFF)
+option(USE_FFMPEG "use ffmpeg for sound" ON)
+option(USE_AUDIERE "use audiere for sound" ON)
 option(USE_MPG123 "use mpg123 + libsndfile for sound" ON)
+
+# OS X deployment
+option(OPENMW_OSX_DEPLOYMENT OFF)
 
 find_program(DPKG_PROGRAM dpkg DOC "dpkg program of Debian-based systems")
 
@@ -68,52 +67,16 @@ endif()
 # We probably support older versions than this.
 cmake_minimum_required(VERSION 2.6)
 
-#
-# Pre-built binaries being used?
-#
-IF(EXISTS "${CMAKE_SOURCE_DIR}/prebuilt/vc100-mt-gd/ogre_1_7_1")
-    set(PREBUILT_DIR "${CMAKE_SOURCE_DIR}/prebuilt/vc100-mt-gd")
-    message (STATUS "OpenMW pre-built binaries found at ${PREBUILT_DIR}.")
-
-    SET(ENV{OGRE_HOME} "${PREBUILT_DIR}/ogre_1_7_1")
-
-    SET(ENV{BOOST_ROOT} "${PREBUILT_DIR}/boost_1_42_0")
-    set(Boost_USE_STATIC_LIBS   ON)
-    set(Boost_USE_MULTITHREADED ON)
-    set(ENV{BOOST_INCLUDEDIR} "${BOOST_ROOT}/include")
-    set(ENV{BOOST_LIBRARYDIR} "${BOOST_ROOT}/lib")
-
-    set(ENV{FREETYPE_DIR} "${PREBUILT_DIR}/freetype-2.3.5-1")
-
-    set(USE_MPG123 OFF)
-    set(USE_AUDIERE ON)
-    set(AUDIERE_INCLUDE_DIR "${PREBUILT_DIR}/audiere-1.9.4/include")
-    set(AUDIERE_LIBRARY "${PREBUILT_DIR}/audiere-1.9.4/lib/audiere.lib")
-
-    set(ENV{OPENALDIR} "${PREBUILT_DIR}/OpenAL 1.1 SDK")
-
-    set(BULLET_ROOT "${PREBUILT_DIR}/bullet")
-ELSE()
-    message (STATUS "OpenMW pre-built binaries not found.  Using standard locations.")
-ENDIF()
-
 # source directory: libs
 
 set(LIBDIR ${CMAKE_SOURCE_DIR}/libs)
 
-set(MANGLE_INPUT ${LIBDIR}/mangle/input/servers/ois_driver.cpp)
-set(MANGLE_ALL ${MANGLE_INPUT})
-source_group(libs\\mangle FILES ${MANGLE_ALL})
-
 set(OENGINE_OGRE
   ${LIBDIR}/openengine/ogre/renderer.cpp
-  ${LIBDIR}/openengine/ogre/mouselook.cpp
   ${LIBDIR}/openengine/ogre/fader.cpp
-  ${LIBDIR}/openengine/ogre/imagerotate.cpp
-  ${LIBDIR}/openengine/ogre/atlas.cpp
+  ${LIBDIR}/openengine/ogre/selectionbuffer.cpp
 )
 set(OENGINE_GUI
-  ${LIBDIR}/openengine/gui/events.cpp
   ${LIBDIR}/openengine/gui/manager.cpp
 )
 
@@ -130,8 +93,6 @@ set(OENGINE_BULLET
     ${LIBDIR}/openengine/bullet/physic.hpp
     ${LIBDIR}/openengine/bullet/BulletShapeLoader.cpp
     ${LIBDIR}/openengine/bullet/BulletShapeLoader.h
-    ${LIBDIR}/openengine/bullet/pmove.cpp
-    ${LIBDIR}/openengine/bullet/pmove.h
     ${LIBDIR}/openengine/bullet/trace.cpp
     ${LIBDIR}/openengine/bullet/trace.h
 
@@ -140,34 +101,58 @@ set(OENGINE_BULLET
 set(OENGINE_ALL ${OENGINE_OGRE} ${OENGINE_GUI} ${OENGINE_BULLET})
 source_group(libs\\openengine FILES ${OENGINE_ALL})
 
-set(OPENMW_LIBS ${MANGLE_ALL} ${OENGINE_ALL})
+set(OPENMW_LIBS ${OENGINE_ALL})
 set(OPENMW_LIBS_HEADER)
 
 # Sound setup
+set(GOT_SOUND_INPUT 0)
 set(SOUND_INPUT_INCLUDES "")
 set(SOUND_INPUT_LIBRARY "")
 set(SOUND_DEFINE "")
 if (USE_FFMPEG)
-    find_package(FFMPEG REQUIRED)
-    set(SOUND_INPUT_INCLUDES ${SOUND_INPUT_INCLUDES} ${FFMPEG_INCLUDE_DIR})
-    set(SOUND_INPUT_LIBRARY ${SOUND_INPUT_LIBRARY} ${FFMPEG_LIBRARIES})
-    set(SOUND_DEFINE ${SOUND_DEFINE} -DOPENMW_USE_FFMPEG)
+    set(FFmpeg_FIND_COMPONENTS AVCODEC AVFORMAT AVUTIL SWSCALE)
+    find_package(FFmpeg)
+    if (FFMPEG_FOUND)
+        set(SOUND_INPUT_INCLUDES ${SOUND_INPUT_INCLUDES} ${FFMPEG_INCLUDE_DIRS})
+        set(SOUND_INPUT_LIBRARY ${SOUND_INPUT_LIBRARY} ${FFMPEG_LIBRARIES} ${SWSCALE_LIBRARIES})
+        set(SOUND_DEFINE ${SOUND_DEFINE} -DOPENMW_USE_FFMPEG)
+        set(GOT_SOUND_INPUT 1)
+    endif (FFMPEG_FOUND)
 endif (USE_FFMPEG)
 
-if (USE_AUDIERE)
-    find_package(Audiere REQUIRED)
-    set(SOUND_INPUT_INCLUDES ${SOUND_INPUT_INCLUDES} ${AUDIERE_INCLUDE_DIR})
-    set(SOUND_INPUT_LIBRARY ${SOUND_INPUT_LIBRARY} ${AUDIERE_LIBRARY})
-    set(SOUND_DEFINE ${SOUND_DEFINE} -DOPENMW_USE_AUDIERE)
-endif (USE_AUDIERE)
+if (USE_AUDIERE AND NOT GOT_SOUND_INPUT)
+    find_package(Audiere)
+    if (AUDIERE_FOUND)
+        set(SOUND_INPUT_INCLUDES ${SOUND_INPUT_INCLUDES} ${AUDIERE_INCLUDE_DIR})
+        set(SOUND_INPUT_LIBRARY ${SOUND_INPUT_LIBRARY} ${AUDIERE_LIBRARY})
+        set(SOUND_DEFINE ${SOUND_DEFINE} -DOPENMW_USE_AUDIERE)
+        set(GOT_SOUND_INPUT 1)
+    endif (AUDIERE_FOUND)
+endif (USE_AUDIERE AND NOT GOT_SOUND_INPUT)
 
-if (USE_MPG123)
+if (USE_MPG123 AND NOT GOT_SOUND_INPUT)
     find_package(MPG123 REQUIRED)
     find_package(SNDFILE REQUIRED)
-    set(SOUND_INPUT_INCLUDES ${SOUND_INPUT_INCLUDES} ${MPG123_INCLUDE_DIR} ${SNDFILE_INCLUDE_DIR})
-    set(SOUND_INPUT_LIBRARY ${SOUND_INPUT_LIBRARY} ${MPG123_LIBRARY} ${SNDFILE_LIBRARY})
-    set(SOUND_DEFINE ${SOUND_DEFINE} -DOPENMW_USE_MPG123)
-endif (USE_MPG123)
+    if (MPG123_FOUND AND SNDFILE_FOUND)
+        set(SOUND_INPUT_INCLUDES ${SOUND_INPUT_INCLUDES} ${MPG123_INCLUDE_DIR} ${SNDFILE_INCLUDE_DIR})
+        set(SOUND_INPUT_LIBRARY ${SOUND_INPUT_LIBRARY} ${MPG123_LIBRARY} ${SNDFILE_LIBRARY})
+        set(SOUND_DEFINE ${SOUND_DEFINE} -DOPENMW_USE_MPG123)
+        set(GOT_SOUND_INPUT 1)
+    endif (MPG123_FOUND AND SNDFILE_FOUND)
+endif (USE_MPG123 AND NOT GOT_SOUND_INPUT)
+
+if (NOT GOT_SOUND_INPUT)
+    message(WARNING "--------------------")
+    message(WARNING "Failed to find any sound input packages")
+    message(WARNING "--------------------")
+endif (NOT GOT_SOUND_INPUT)
+
+if (NOT FFMPEG_FOUND)
+    message(WARNING "--------------------")
+    message(WARNING "FFmpeg not found, video playback will be disabled")
+    message(WARNING "--------------------")
+endif (NOT FFMPEG_FOUND)
+
 
 # Platform specific
 if (WIN32)
@@ -175,9 +160,9 @@ if (WIN32)
     set(PLATFORM_INCLUDE_DIR "platform")
     add_definitions(-DBOOST_ALL_NO_LIB)
 else (WIN32)
-set(PLATFORM_INCLUDE_DIR "")
-find_path (UUID_INCLUDE_DIR uuid/uuid.h)
-include_directories(${UUID_INCLUDE_DIR})
+    set(PLATFORM_INCLUDE_DIR "")
+    find_path (UUID_INCLUDE_DIR uuid/uuid.h)
+    include_directories(${UUID_INCLUDE_DIR})
 endif (WIN32)
 if (MSVC10)
     set(PLATFORM_INCLUDE_DIR "")
@@ -191,17 +176,31 @@ endif (APPLE)
 
 # Fix for not visible pthreads functions for linker with glibc 2.15
 if (UNIX AND NOT APPLE)
-find_package (Threads)
+    find_package (Threads)
+endif()
+
+# find boost without components so we can use Boost_VERSION
+find_package(Boost REQUIRED)
+
+set(BOOST_COMPONENTS system filesystem program_options thread)
+
+if (Boost_VERSION LESS 104900)
+    set(SHINY_USE_WAVE_SYSTEM_INSTALL "TRUE")
+    set(BOOST_COMPONENTS ${BOOST_COMPONENTS} wave)
+endif()
+
+IF(BOOST_STATIC)
+    set(Boost_USE_STATIC_LIBS   ON)
 endif()
 
 find_package(OGRE REQUIRED)
 find_package(MyGUI REQUIRED)
-find_package(Boost REQUIRED COMPONENTS system filesystem program_options thread)
+find_package(Boost REQUIRED COMPONENTS ${BOOST_COMPONENTS})
 find_package(OIS REQUIRED)
 find_package(OpenAL REQUIRED)
 find_package(Bullet REQUIRED)
 IF(OGRE_STATIC)
-find_package(Cg REQUIRED)
+find_package(Cg)
 IF(WIN32)
 set(OGRE_PLUGIN_INCLUDE_DIRS ${OGRE_Plugin_CgProgramManager_INCLUDE_DIRS} ${OGRE_Plugin_OctreeSceneManager_INCLUDE_DIRS} ${OGRE_Plugin_ParticleFX_INCLUDE_DIRS} ${OGRE_RenderSystem_Direct3D9_INCLUDE_DIRS} ${OGRE_RenderSystem_GL_INCLUDE_DIRS})
 ELSE(WIN32)
@@ -228,7 +227,49 @@ if (APPLE)
                           ${OGRE_Plugin_OctreeSceneManager_LIBRARY_REL}
                           ${OGRE_Plugin_CgProgramManager_LIBRARY_REL}
                           ${OGRE_Plugin_ParticleFX_LIBRARY_REL})
+
+    if (${OGRE_PLUGIN_DIR_REL}})
+        set(OGRE_PLUGINS_REL_FOUND TRUE)
+    endif ()
+
+    if (${OGRE_PLUGIN_DIR_DBG})
+        set(OGRE_PLUGINS_DBG_FOUND TRUE)
+    endif ()
+
+    if (${OGRE_PLUGINS_REL_FOUND})
+        set(OGRE_PLUGIN_DIR ${OGRE_PLUGIN_DIR_REL})
+    else ()
+        set(OGRE_PLUGIN_DIR ${OGRE_PLUGIN_DIR_DBG})
+    endif ()
+
+    #set(OGRE_PLUGIN_DIR "${OGRE_PLUGIN_DIR}/")
+
+    configure_file(${OpenMW_SOURCE_DIR}/files/mac/Info.plist
+        "${APP_BUNDLE_DIR}/Contents/Info.plist")
+
+    configure_file(${OpenMW_SOURCE_DIR}/files/mac/openmw.icns
+        "${APP_BUNDLE_DIR}/Contents/Resources/OpenMW.icns" COPYONLY)
 endif (APPLE)
+
+# Set up DEBUG define
+set_directory_properties(PROPERTIES COMPILE_DEFINITIONS_DEBUG DEBUG=1)
+
+# Set up Ogre plugin folder & debug suffix
+if (APPLE)
+	# Ogre on OS X doesn't use "_d" suffix (see Ogre's CMakeLists.txt)
+	add_definitions(-DOGRE_PLUGIN_DEBUG_SUFFIX="")
+else ()
+	add_definitions(-DOGRE_PLUGIN_DEBUG_SUFFIX="_d")
+endif()
+
+add_definitions(-DOGRE_PLUGIN_DIR_REL="${OGRE_PLUGIN_DIR_REL}")
+add_definitions(-DOGRE_PLUGIN_DIR_DBG="${OGRE_PLUGIN_DIR_DBG}")
+if (APPLE AND OPENMW_OSX_DEPLOYMENT)
+    add_definitions(-DOGRE_PLUGIN_DIR="${APP_BUNDLE_NAME}/Contents/Plugins")
+else()
+    add_definitions(-DOGRE_PLUGIN_DIR="${OGRE_PLUGIN_DIR}")
+endif()
+
 
 add_subdirectory(files/)
 add_subdirectory(files/mygui)
@@ -254,56 +295,15 @@ configure_file(${OpenMW_SOURCE_DIR}/files/openmw.cfg.local
 configure_file(${OpenMW_SOURCE_DIR}/files/openmw.cfg
     "${OpenMW_BINARY_DIR}/openmw.cfg.install")
 
-if (WIN32)
-    configure_file(${OpenMW_SOURCE_DIR}/files/plugins.cfg.win32
-        "${OpenMW_BINARY_DIR}/plugins.cfg" COPYONLY)
-endif (WIN32)
 
-if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-    configure_file(${OpenMW_SOURCE_DIR}/files/plugins.cfg.linux
-        "${OpenMW_BINARY_DIR}/plugins.cfg")
-
+if (NOT WIN32 AND NOT APPLE)
     configure_file(${OpenMW_SOURCE_DIR}/files/openmw.desktop
         "${OpenMW_BINARY_DIR}/openmw.desktop")
 endif()
 
-if (APPLE)
-    if (${OGRE_PLUGIN_DIR_REL}})
-        set(OGRE_PLUGINS_REL_FOUND TRUE)
-    endif ()
-
-    if (${OGRE_PLUGIN_DIR_DBG})
-        set(OGRE_PLUGINS_DBG_FOUND TRUE)
-    endif ()
-
-    if (${OGRE_PLUGINS_REL_FOUND})
-        set(OGRE_PLUGIN_DIR ${OGRE_PLUGIN_DIR_REL})
-    else ()
-        set(OGRE_PLUGIN_DIR ${OGRE_PLUGIN_DIR_DBG})
-    endif ()
-
-    set(OGRE_PLUGIN_DIR "${OGRE_PLUGIN_DIR}/")
-
-    configure_file(${OpenMW_SOURCE_DIR}/files/plugins.cfg.mac
-        "${OpenMW_BINARY_DIR}/plugins.cfg")
-
-    set(OGRE_PLUGIN_DIR_2 ${OGRE_PLUGIN_DIR})
-    set(OGRE_PLUGIN_DIR "")
-    configure_file(${OpenMW_SOURCE_DIR}/files/plugins.cfg.mac
-        "${OpenMW_BINARY_DIR}/plugins.cfg.install")
-    set(OGRE_PLUGIN_DIR ${OGRE_PLUGIN_DIR_2})
-
-    configure_file(${OpenMW_SOURCE_DIR}/files/mac/Info.plist
-        "${APP_BUNDLE_DIR}/Contents/Info.plist")
-
-    configure_file(${OpenMW_SOURCE_DIR}/files/mac/openmw.icns
-        "${APP_BUNDLE_DIR}/Contents/Resources/OpenMW.icns" COPYONLY)
-endif (APPLE)
-
-
 # Compiler settings
 if (CMAKE_COMPILER_IS_GNUCC)
-    add_definitions (-Wall -Wextra -Wno-unused-parameter -Wno-reorder)
+    add_definitions (-Wall -Wextra -Wno-unused-parameter -Wno-reorder -std=c++98 -pedantic -Wno-long-long)
 
     # Silence warnings in OGRE headers. Remove once OGRE got fixed!
     add_definitions (-Wno-ignored-qualifiers)
@@ -337,7 +337,6 @@ if(DPKG_PROGRAM)
     INSTALL(FILES "${OpenMW_BINARY_DIR}/settings-default.cfg" DESTINATION "../etc/openmw/" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
     INSTALL(FILES "${OpenMW_BINARY_DIR}/transparency-overrides.cfg" DESTINATION "../etc/openmw/" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
     INSTALL(FILES "${OpenMW_BINARY_DIR}/openmw.cfg.install" DESTINATION "../etc/openmw/" RENAME "openmw.cfg" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
-    INSTALL(FILES "${OpenMW_BINARY_DIR}/plugins.cfg" DESTINATION "../etc/openmw/" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
 
     #Install resources
     INSTALL(DIRECTORY "${OpenMW_BINARY_DIR}/resources" DESTINATION "share/games/openmw/" FILE_PERMISSIONS OWNER_READ GROUP_READ WORLD_READ COMPONENT "Resources")
@@ -354,7 +353,7 @@ if(DPKG_PROGRAM)
     SET(CPACK_DEBIAN_PACKAGE_NAME "openmw")
     SET(CPACK_DEBIAN_PACKAGE_VERSION "${VERSION_STRING}")
     SET(CPACK_PACKAGE_EXECUTABLES "openmw;OpenMW esmtool;Esmtool omwlauncher;OMWLauncher mwiniimporter;MWiniImporter")
-    SET(CPACK_DEBIAN_PACKAGE_DEPENDS "nvidia-cg-toolkit (>= 2.1),  libboost-filesystem1.46.1 (>= 1.46.1), libboost-program-options1.46.1 (>= 1.46.1), libboost-system1.46.1 (>= 1.46.1), libboost-thread1.46.1 (>= 1.46.1), libc6 (>= 2.11.2), libfreetype6 (>= 2.2.1), libgcc1 (>= 1:4.1.1), libmpg123-0 (>= 1.12.1), libois-1.3.0 (>= 1.3.0), libopenal1 (>= 1:1.12.854), libsndfile1 (>= 1.0.23), libstdc++6 (>= 4.4.5), libuuid1 (>= 2.17.2), libqtgui4 (>= 4.7.0)")
+    SET(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.11.2), libfreetype6 (>= 2.2.1), libgcc1 (>= 1:4.1.1), libmpg123-0 (>= 1.12.1), libois-1.3.0 (>= 1.3.0), libopenal1 (>= 1:1.12.854), libsndfile1 (>= 1.0.23), libstdc++6 (>= 4.4.5), libuuid1 (>= 2.17.2), libqtgui4 (>= 4.7.0)")
 
     SET(CPACK_DEBIAN_PACKAGE_SECTION "Games")
 
@@ -375,11 +374,10 @@ if(WIN32)
     INSTALL(FILES ${dll_files} DESTINATION ".")
     INSTALL(FILES "${OpenMW_BINARY_DIR}/openmw.cfg.install" DESTINATION "." RENAME "openmw.cfg")
     INSTALL(FILES
-        "${OpenMW_BINARY_DIR}/plugins.cfg"
         "${OpenMW_SOURCE_DIR}/readme.txt"
         "${OpenMW_SOURCE_DIR}/GPL3.txt"
         "${OpenMW_SOURCE_DIR}/OFL.txt"
-        "${OpenMW_SOURCE_DIR}/Bitstream Vera License.txt"
+        "${OpenMW_SOURCE_DIR}/DejaVu Font License.txt"
         "${OpenMW_SOURCE_DIR}/Daedric Font License.txt"
         "${OpenMW_BINARY_DIR}/launcher.qss"
         "${OpenMW_BINARY_DIR}/settings-default.cfg"
@@ -394,7 +392,7 @@ if(WIN32)
     SET(CPACK_PACKAGE_VENDOR "OpenMW.org")
     SET(CPACK_PACKAGE_VERSION ${OPENMW_VERSION})
     SET(CPACK_PACKAGE_VERSION_MAJOR ${OPENMW_VERSION_MAJOR})
-    SET(CPACK_PACKAGE_VERSION_MINOR ${OPENMW_VERSION_MINO})
+    SET(CPACK_PACKAGE_VERSION_MINOR ${OPENMW_VERSION_MINOR})
     SET(CPACK_PACKAGE_VERSION_PATCH ${OPENMW_VERSION_RELEASE})
     SET(CPACK_PACKAGE_EXECUTABLES "openmw;OpenMW;omwlauncher;OpenMW Launcher")
     SET(CPACK_NSIS_CREATE_ICONS_EXTRA "CreateShortCut '\$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\Readme.lnk' '\$INSTDIR\\\\readme.txt'")
@@ -405,7 +403,7 @@ if(WIN32)
     SET(CPACK_RESOURCE_FILE_README "${OpenMW_SOURCE_DIR}/readme.txt")
     SET(CPACK_PACKAGE_DESCRIPTION_FILE "${OpenMW_SOURCE_DIR}/readme.txt")
     SET(CPACK_NSIS_EXECUTABLES_DIRECTORY ".")
-    SET(CPACK_NSIS_DISPLAY_NAME "OpenMW")
+    SET(CPACK_NSIS_DISPLAY_NAME "OpenMW ${OPENMW_VERSION}")
     SET(CPACK_NSIS_HELP_LINK "http:\\\\\\\\www.openmw.org")
     SET(CPACK_NSIS_URL_INFO_ABOUT "http:\\\\\\\\www.openmw.org")
     SET(CPACK_NSIS_INSTALLED_ICON_NAME "omwlauncher.exe")
@@ -439,6 +437,10 @@ if(WIN32)
     include(CPack)
 endif(WIN32)
 
+# Extern
+add_subdirectory (extern/shiny)
+add_subdirectory (extern/oics)
+
 # Components
 add_subdirectory (components)
 
@@ -455,6 +457,15 @@ endif()
 
 if (BUILD_MWINIIMPORTER)
    add_subdirectory( apps/mwiniimporter )
+endif()
+
+if (BUILD_OPENCS)
+   add_subdirectory (apps/opencs)
+endif()
+
+# UnitTests
+if (BUILD_UNITTESTS)
+  add_subdirectory( apps/openmw_test_suite )
 endif()
 
 if (WIN32)
@@ -482,7 +493,7 @@ if (WIN32)
         # Warnings that aren't enabled normally and don't need to be enabled
         # They're unneeded and sometimes completely retarded warnings that /Wall enables
         # Not going to bother commenting them as they tend to warn on every standard library files
-        4061 4263 4264 4266 4350 4514 4548 4571 4610 4619 4623 4625 4626 4628 4640 4668 4710 4711 4820 4826 4917 4946
+        4061 4263 4264 4266 4350 4371 4514 4548 4571 4610 4619 4623 4625 4626 4628 4640 4668 4710 4711 4820 4826 4917 4946
 
         # Warnings that are thrown on standard libraries and not OpenMW
         4347 # Non-template function with same name and parameter count as template function
@@ -492,6 +503,11 @@ if (WIN32)
         4738 # Storing 32-bit float result in memory, possible loss of performance
         4986 # Undocumented warning that occurs in the crtdbg.h file
         4996 # Function was declared deprecated
+
+		# cause by ogre extensivly
+		4193 # #pragma warning(pop) : no matching '#pragma warning(push)'
+		4251 # class 'XXXX' needs to have dll-interface to be used by clients of class 'YYYY'
+		4275 # non dll-interface struct 'XXXX' used as base for dll-interface class 'YYYY'
 
         # OpenMW specific warnings
         4099 # Type mismatch, declared class or struct is defined with other type
@@ -503,17 +519,23 @@ if (WIN32)
         4309 # Variable overflow, trying to store 128 in a signed char for example
         4355 # Using 'this' in member initialization list
         4701 # Potentially uninitialized local variable used
+		4800 # Boolean optimization warning, e.g. myBool = (myInt != 0) instead of myBool = myInt
         )
 
     foreach(d ${WARNINGS_DISABLE})
         set(WARNINGS "${WARNINGS} /wd${d}")
     endforeach(d)
 
+    set_target_properties(shiny PROPERTIES COMPILE_FLAGS ${WARNINGS})
+    set_target_properties(shiny.OgrePlatform PROPERTIES COMPILE_FLAGS ${WARNINGS})
     set_target_properties(components PROPERTIES COMPILE_FLAGS ${WARNINGS})
     if (BUILD_LAUNCHER)
 		set_target_properties(omwlauncher PROPERTIES COMPILE_FLAGS ${WARNINGS})
 	endif (BUILD_LAUNCHER)
     set_target_properties(openmw PROPERTIES COMPILE_FLAGS ${WARNINGS})
+    if (BUILD_ESMTOOL)
+        set_target_properties(esmtool PROPERTIES COMPILE_FLAGS ${WARNINGS})
+    endif (BUILD_ESMTOOL)
   endif(MSVC)
 
   # Same for MinGW
@@ -544,7 +566,6 @@ if (APPLE)
     install(DIRECTORY "${APP_BUNDLE_DIR}" USE_SOURCE_PERMISSIONS DESTINATION "${INSTALL_SUBDIR}" COMPONENT Runtime)
     install(DIRECTORY "${OpenMW_BINARY_DIR}/resources" DESTINATION "${INSTALL_SUBDIR}" COMPONENT Runtime)
     install(FILES "${OpenMW_BINARY_DIR}/openmw.cfg.install" RENAME "openmw.cfg" DESTINATION "${INSTALL_SUBDIR}" COMPONENT Runtime)
-    install(FILES "${OpenMW_BINARY_DIR}/plugins.cfg.install" RENAME "plugins.cfg" DESTINATION "${INSTALL_SUBDIR}" COMPONENT Runtime)
     install(FILES "${OpenMW_BINARY_DIR}/launcher.qss" DESTINATION "${INSTALL_SUBDIR}" COMPONENT Runtime)
 
     install(FILES "${OpenMW_BINARY_DIR}/settings-default.cfg" DESTINATION "${INSTALL_SUBDIR}" COMPONENT Runtime)
@@ -621,3 +642,46 @@ if (APPLE)
         " COMPONENT Runtime)
         include(CPack)
 endif (APPLE)
+
+if (NOT WIN32 AND NOT DPKG_PROGRAM AND NOT APPLE)
+    ## Non Debian based Linux building
+    # paths
+    set(BINDIR "${CMAKE_INSTALL_PREFIX}/usr/bin" CACHE PATH "Where to install binaries")
+    set(DATAROOTDIR "${CMAKE_INSTALL_PREFIX}/share" CACHE PATH "Sets the root of data directories to a non-default location")
+    set(DATADIR "${DATAROOTDIR}/openmw" CACHE PATH "Sets the openmw data directories to a non-default location")
+    set(DOCDIR "${DATAROOTDIR}/doc/openmw" CACHE PATH "Sets the doc directory to a non-default location.")
+    set(MANDIR "${DATAROOTDIR}/man" CACHE PATH "Where to install manpages")
+    set(SYSCONFDIR "${CMAKE_INSTALL_PREFIX}/etc/openmw" CACHE PATH "Set config dir")
+    set(ICONDIR "${DATAROOTDIR}/pixmaps" CACHE PATH "Set icon dir")
+
+    # Install binaries
+    INSTALL(PROGRAMS "${OpenMW_BINARY_DIR}/openmw" DESTINATION "${BINDIR}" )
+    IF(BUILD_LAUNCHER)
+        INSTALL(PROGRAMS "${OpenMW_BINARY_DIR}/omwlauncher" DESTINATION "${BINDIR}" )
+    ENDIF(BUILD_LAUNCHER)
+    IF(BUILD_ESMTOOL)
+        INSTALL(PROGRAMS "${OpenMW_BINARY_DIR}/esmtool" DESTINATION "${BINDIR}" )
+    ENDIF(BUILD_ESMTOOL)
+    IF(BUILD_MWINIIMPORTER)
+        INSTALL(PROGRAMS "${OpenMW_BINARY_DIR}/mwiniimport" DESTINATION "${BINDIR}" )
+    ENDIF(BUILD_MWINIIMPORTER)
+    IF(BUILD_OPENCS)
+        INSTALL(PROGRAMS "${OpenMW_BINARY_DIR}/opencs" DESTINATION "${BINDIR}" )
+    ENDIF(BUILD_OPENCS)
+
+    # Install icon and .desktop
+    INSTALL(FILES "${OpenMW_SOURCE_DIR}/apps/launcher/resources/images/openmw.png" DESTINATION "${ICONDIR}")
+    INSTALL(FILES "${OpenMW_BINARY_DIR}/openmw.desktop" DESTINATION "${DATAROOTDIR}/applications")
+
+    # Install global configuration files
+    INSTALL(FILES "${OpenMW_BINARY_DIR}/openmw.cfg.install" DESTINATION "${SYSCONFDIR}" RENAME "openmw.cfg" )
+    #INSTALL(FILES "${OpenMW_BINARY_DIR}/plugins.cfg" DESTINATION "${SYSCONFDIR}" )
+    INSTALL(FILES "${OpenMW_BINARY_DIR}/settings-default.cfg" DESTINATION "${SYSCONFDIR}" )
+    INSTALL(FILES "${OpenMW_BINARY_DIR}/transparency-overrides.cfg" DESTINATION "${SYSCONFDIR}" )
+
+    # Install resources
+    INSTALL(DIRECTORY "${OpenMW_BINARY_DIR}/resources" DESTINATION "${DATADIR}" )
+    IF(BUILD_LAUNCHER)
+        INSTALL(FILES "${OpenMW_BINARY_DIR}/launcher.qss" DESTINATION "${DATADIR}/resources" )
+    ENDIF(BUILD_LAUNCHER)
+endif(NOT WIN32 AND NOT DPKG_PROGRAM AND NOT APPLE)

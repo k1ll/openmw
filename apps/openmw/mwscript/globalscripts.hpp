@@ -6,24 +6,21 @@
 
 #include "locals.hpp"
 
-namespace ESMS
+namespace MWWorld 
 {
     struct ESMStore;
 }
 
 namespace MWScript
 {
-    class ScriptManager;
-
     class GlobalScripts
     {
-            const ESMS::ESMStore& mStore;
-            ScriptManager& mScriptManager;
+            const MWWorld::ESMStore& mStore;
             std::map<std::string, std::pair<bool, Locals> > mScripts; // running, local variables
 
         public:
 
-            GlobalScripts (const ESMS::ESMStore& store, ScriptManager& scriptManager);
+            GlobalScripts (const MWWorld::ESMStore& store);
 
             void addScript (const std::string& name);
 

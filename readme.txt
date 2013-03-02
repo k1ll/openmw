@@ -3,13 +3,13 @@ OpenMW: A reimplementation of The Elder Scrolls III: Morrowind
 OpenMW is an attempt at recreating the engine for the popular role-playing game
 Morrowind by Bethesda Softworks. You need to own and install the original game for OpenMW to work.
 
-Version: 0.16.0
+Version: 0.21.0
 License: GPL (see GPL3.txt for more information)
 Website: http://www.openmw.org
 
 Font Licenses:
 EBGaramond-Regular.ttf: OFL (see OFL.txt for more information)
-VeraMono.ttf: custom (see Bitstream Vera License.txt for more information)
+DejaVuLGCSansMono.ttf: custom (see DejaVu Font License.txt for more information)
 
 
 
@@ -66,9 +66,13 @@ Allowed options:
   --debug [=arg(=1)] (=0)          debug mode
   --nosound [=arg(=1)] (=0)        disable all sounds
   --script-verbose [=arg(=1)] (=0) verbose script output
-  --new-game [=arg(=1)] (=0)       activate char gen/new game mechanics
   --script-all [=arg(=1)] (=0)     compile all scripts (excluding dialogue scri
                                    pts) at startup
+  --script-console [=arg(=1)] (=0) enable console-only script functionality
+  --script-run arg                 select a file containing a list of console
+                                   commands that is executed on startup
+
+  --new-game [=arg(=1)] (=0)       activate char gen/new game mechanics
   --fs-strict [=arg(=1)] (=0)      strict file system handling (no case folding
                                    )
   --encoding arg (=win1252)        Character encoding used in OpenMW game messa
@@ -89,6 +93,161 @@ Allowed options:
 
 
 CHANGELOG
+
+0.21.0
+
+Bug #253: Dialogs don't work for Russian version of Morrowind
+Bug #267: Activating creatures without dialogue can still activate the dialogue GUI
+Bug #354: True flickering lights
+Bug #386: The main menu's first entry is wrong (in french)
+Bug #479: Adding the spell "Ash Woe Blight" to the player causes strange attribute oscillations
+Bug #495: Activation Range
+Bug #497: Failed Disposition check doesn't stop a dialogue entry from being returned
+Bug #498: Failing a disposition check shouldn't eliminate topics from the the list of those available
+Bug #500: Disposition for most NPCs is 0/100
+Bug #501: Getdisposition command wrongly returns base disposition
+Bug #506: Journal UI doesn't update anymore
+Bug #507: EnableRestMenu is not a valid command - change it to EnableRest
+Bug #508: Crash in Ald Daedroth Shrine
+Bug #517: Wrong price calculation when untrading an item
+Bug #521: MWGui::InventoryWindow creates a duplicate player actor at the origin
+Bug #524: Beast races are able to wear shoes
+Bug #527: Background music fails to play
+Bug #533: The arch at Gnisis entrance is not displayed
+Bug #534: Terrain gets its correct shape only some time after the cell is loaded
+Bug #536: The same entry can be added multiple times to the journal
+Bug #539: Race selection is broken
+Bug #544: Terrain normal map corrupt when the map is rendered
+Feature #39: Video Playback
+Feature #151: ^-escape sequences in text output
+Feature #392: Add AI related script functions
+Feature #456: Determine required ini fallback values and adjust the ini importer accordingly
+Feature #460: Experimental DirArchives improvements
+Feature #540: Execute scripts of objects in containers/inventories in active cells
+Task #401: Review GMST fixing
+Task #453: Unify case smashing/folding
+Task #512: Rewrite utf8 component
+
+0.20.0
+
+Bug #366: Changing the player's race during character creation does not change the look of the player character
+Bug #430: Teleporting and using loading doors linking within the same cell reloads the cell
+Bug #437: Stop animations when paused
+Bug #438: Time displays as "0 a.m." when it should be "12 a.m."
+Bug #439: Text in "name" field of potion/spell creation window is persistent
+Bug #440: Starting date at a new game is off by one day
+Bug #442: Console window doesn't close properly sometimes
+Bug #448: Do not break container window formatting when item names are very long
+Bug #458: Topics sometimes not automatically added to known topic list
+Bug #476: Auto-Moving allows player movement after using DisablePlayerControls
+Bug #478: After sleeping in a bed the rest dialogue window opens automtically again
+Bug #492: On creating potions the ingredients are removed twice
+Feature #63: Mercantile skill
+Feature #82: Persuasion Dialogue
+Feature #219: Missing dialogue filters/functions
+Feature #369: Add a FailedAction
+Feature #377: Select head/hair on character creation
+Feature #391: Dummy AI package classes
+Feature #435: Global Map, 2nd Layer
+Feature #450: Persuasion
+Feature #457: Add more script instructions
+Feature #474: update the global variable pcrace when the player's race is changed
+Task #158: Move dynamically generated classes from Player class to World Class
+Task #159: ESMStore rework and cleanup
+Task #163: More Component Namespace Cleanup
+Task #402: Move player data from MWWorld::Player to the player's NPC record
+Task #446: Fix no namespace in BulletShapeLoader
+
+0.19.0
+
+Bug #374: Character shakes in 3rd person mode near the origin
+Bug #404: Gamma correct rendering
+Bug #407: Shoes of St. Rilm do not work
+Bug #408: Rugs has collision even if they are not supposed to
+Bug #412: Birthsign menu sorted incorrectly
+Bug #413: Resolutions presented multiple times in launcher
+Bug #414: launcher.cfg file stored in wrong directory
+Bug #415: Wrong esm order in openmw.cfg
+Bug #418: Sound listener position updates incorrectly
+Bug #423: wrong usage of "Version" entry in openmw.desktop
+Bug #426: Do not use hardcoded splash images
+Bug #431: Don't use markers for raycast
+Bug #432: Crash after picking up items from an NPC
+Feature #21/#95: Sleeping/resting
+Feature #61: Alchemy Skill
+Feature #68: Death
+Feature #69/#86: Spell Creation
+Feature #72/#84: Travel
+Feature #76: Global Map, 1st Layer
+Feature #120: Trainer Window
+Feature #152: Skill Increase from Skill Books
+Feature #160: Record Saving
+Task #400: Review GMST access
+
+0.18.0
+
+Bug #310: Button of the "preferences menu" are too small
+Bug #361: Hand-to-hand skill is always 100
+Bug #365: NPC and creature animation is jerky; Characters float around when they are not supposed to
+Bug #372: playSound3D uses original coordinates instead of current coordinates.
+Bug #373: Static OGRE build faulty
+Bug #375: Alt-tab toggle view
+Bug #376: Screenshots are disable
+Bug #378: Exception when drinking self-made potions
+Bug #380: Cloth visibility problem
+Bug #384: Weird character on doors tooltip.
+Bug #398: Some objects do not collide in MW, but do so in OpenMW
+Feature #22: Implement level-up
+Feature #36: Hide Marker
+Feature #88: Hotkey Window
+Feature #91: Level-Up Dialogue
+Feature #118: Keyboard and Mouse-Button bindings
+Feature #119: Spell Buying Window
+Feature #133: Handle resources across multiple data directories
+Feature #134: Generate a suitable default-value for --data-local
+Feature #292: Object Movement/Creation Script Instructions
+Feature #340: AIPackage data structures
+Feature #356: Ingredients use
+Feature #358: Input system rewrite
+Feature #370: Target handling in actions
+Feature #379: Door markers on the local map
+Feature #389: AI framework
+Feature #395: Using keys to open doors / containers
+Feature #396: Loading screens
+Feature #397: Inventory avatar image and race selection head preview
+Task #339: Move sounds into Action
+
+0.17.0
+
+Bug #225: Valgrind reports about 40MB of leaked memory
+Bug #241: Some physics meshes still don't match
+Bug #248: Some textures are too dark
+Bug #300: Dependency on proprietary CG toolkit
+Bug #302: Some objects don't collide although they should
+Bug #308: Freeze in Balmora, Meldor: Armorer
+Bug #313: openmw without a ~/.config/openmw folder segfault.
+Bug #317: adding non-existing spell via console locks game
+Bug #318: Wrong character normals
+Bug #341: Building with Ogre Debug libraries does not use debug version of plugins
+Bug #347: Crash when running openmw with --start="XYZ"
+Bug #353: FindMyGUI.cmake breaks path on Windows
+Bug #359: WindowManager throws exception at destruction
+Bug #364: Laggy input on OS X due to bug in Ogre's event pump implementation
+Feature #33: Allow objects to cross cell-borders
+Feature #59: Dropping Items (replaced stopgap implementation with a proper one)
+Feature #93: Main Menu
+Feature #96/329/330/331/332/333: Player Control
+Feature #180: Object rotation and scaling.
+Feature #272: Incorrect NIF material sharing
+Feature #314: Potion usage
+Feature #324: Skill Gain
+Feature #342: Drain/fortify dynamic stats/attributes magic effects
+Feature #350: Allow console only script instructions
+Feature #352: Run scripts in console on startup
+Task #107: Refactor mw*-subsystems
+Task #325: Make CreatureStats into a class
+Task #345: Use Ogre's animation system
+Task #351: Rewrite Action class to support automatic sound playing
 
 0.16.0
 

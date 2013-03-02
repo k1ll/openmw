@@ -9,6 +9,7 @@
 #include "magiceffects.hpp"
 #include "spells.hpp"
 #include "activespells.hpp"
+#include "aisequence.hpp"
 
 namespace MWMechanics
 {
@@ -18,30 +19,33 @@ namespace MWMechanics
     class CreatureStats
     {
         Stat<int> mAttributes[8];
-        DynamicStat<int> mDynamic[3]; // health, magicka, fatigue
+        DynamicStat<float> mDynamic[3]; // health, magicka, fatigue
         int mLevel;
         Spells mSpells;
         ActiveSpells mActiveSpells;
         MagicEffects mMagicEffects;
-        int mHello;
-        int mFight;
-        int mFlee;
-        int mAlarm;
+        int mAiSettings[4];
+        AiSequence mAiSequence;
+        float mLevelHealthBonus;
+        bool mDead;
+        int mFriendlyHits;
+        bool mTalkedTo;
+        bool mAlarmed;
+        bool mAttacked;
+        bool mHostile;
 
     public:
         CreatureStats();
-        CreatureStats(const CreatureStats &);
-        virtual ~CreatureStats();
-
-        const CreatureStats & operator=(const CreatureStats &);
 
         const Stat<int> & getAttribute(int index) const;
 
-        const DynamicStat<int> & getHealth() const;
+        const DynamicStat<float> & getHealth() const;
 
-        const DynamicStat<int> & getMagicka() const;
+        const DynamicStat<float> & getMagicka() const;
 
-        const DynamicStat<int> & getFatigue() const;
+        const DynamicStat<float> & getFatigue() const;
+
+        const DynamicStat<float> & getDynamic (int index) const;
 
         const Spells & getSpells() const;
 
@@ -51,24 +55,10 @@ namespace MWMechanics
 
         int getLevel() const;
 
-        int getHello() const;
-
-        int getFight() const;
-
-        int getFlee() const;
-
-        int getAlarm() const;
-
+        int getAiSetting (int index) const;
+        ///< 0: hello, 1 fight, 2 flee, 3 alarm
 
         Stat<int> & getAttribute(int index);
-
-        DynamicStat<int> & getHealth();
-
-        DynamicStat<int> & getMagicka();
-
-        DynamicStat<int> & getFatigue();
-
-        DynamicStat<int> & getDynamic(int index);
 
         Spells & getSpells();
 
@@ -76,14 +66,15 @@ namespace MWMechanics
 
         MagicEffects & getMagicEffects();
 
-
         void setAttribute(int index, const Stat<int> &value);
 
-        void setHealth(const DynamicStat<int> &value);
+        void setHealth(const DynamicStat<float> &value);
 
-        void setMagicka(const DynamicStat<int> &value);
+        void setMagicka(const DynamicStat<float> &value);
 
-        void setFatigue(const DynamicStat<int> &value);
+        void setFatigue(const DynamicStat<float> &value);
+
+        void setDynamic (int index, const DynamicStat<float> &value);
 
         void setSpells(const Spells &spells);
 
@@ -93,192 +84,53 @@ namespace MWMechanics
 
         void setLevel(int level);
 
-        void setHello(int value);
+        void setAiSetting (int index, int value);
+        ///< 0: hello, 1 fight, 2 flee, 3 alarm
 
-        void setFight(int value);
+        const AiSequence& getAiSequence() const;
 
-        void setFlee(int value);
+        AiSequence& getAiSequence();
 
-        void setAlarm(int value);
+        float getFatigueTerm() const;
+        ///< Return effective fatigue
+
+        // small hack to allow the fact that Health permanently increases by 10% of endurance on each level up
+        void increaseLevelHealthBonus(float value);
+        float getLevelHealthBonus() const;
+
+        bool isDead() const;
+
+        void resurrect();
+
+        bool hasCommonDisease() const;
+
+        bool hasBlightDisease() const;
+
+        int getFriendlyHits() const;
+        ///< Number of friendly hits received.
+
+        void friendlyHit();
+        ///< Increase number of friendly hits by one.
+
+        bool hasTalkedToPlayer() const;
+        ///< Has this creature talked with the player before?
+
+        void talkedToPlayer();
+
+        bool isAlarmed() const;
+
+        void setAlarmed (bool alarmed);
+
+        bool getAttacked() const;
+
+        void setAttacked (bool attacked);
+
+        bool isHostile() const;
+
+        void setHostile (bool hostile);
+
+        bool getCreatureTargetted() const;
     };
-
-    // Inline const getters
-
-    inline const Stat<int> &
-    CreatureStats::getAttribute(int index) const {
-        if (index < 0 || index > 7) {
-            throw std::runtime_error("attribute index is out of range");
-        }
-        return mAttributes[index];
-    }
-
-    inline const DynamicStat<int> &
-    CreatureStats::getHealth() const {
-        return mDynamic[0];
-    }
-
-    inline const DynamicStat<int> &
-    CreatureStats::getMagicka() const {
-        return mDynamic[1];
-    }
-
-    inline const DynamicStat<int> &
-    CreatureStats::getFatigue() const {
-        return mDynamic[2];
-    }
-
-    inline const Spells &
-    CreatureStats::getSpells() const {
-        return mSpells;
-    }
-
-    inline const ActiveSpells & 
-    CreatureStats::getActiveSpells() const {
-        return mActiveSpells;
-    }
-
-    inline const MagicEffects & 
-    CreatureStats::getMagicEffects() const {
-        return mMagicEffects;
-    }
-
-    inline int
-    CreatureStats::getLevel() const {
-        return mLevel;
-    }
-   
-    inline int
-    CreatureStats::getHello() const {
-        return mHello;
-    }
-
-    inline int
-    CreatureStats::getFight() const {
-        return mFight;
-    }
-
-    inline int
-    CreatureStats::getFlee() const {
-        return mFlee;
-    }
-
-    inline int
-    CreatureStats::getAlarm() const {
-        return mAlarm;
-    }
-
-    // Inline non-const getters
-
-    inline Stat<int> &
-    CreatureStats::getAttribute(int index) {
-        if (index < 0 || index > 7) {
-            throw std::runtime_error("attribute index is out of range");
-        }
-        return mAttributes[index];
-    }
-
-    inline DynamicStat<int> &
-    CreatureStats::getHealth() {
-        return mDynamic[0];
-    }
-
-    inline DynamicStat<int> &
-    CreatureStats::getMagicka() {
-        return mDynamic[1];
-    }
-
-    inline DynamicStat<int> &
-    CreatureStats::getFatigue() {
-        return mDynamic[2];
-    }
-
-    inline DynamicStat<int> &
-    CreatureStats::getDynamic(int index) {
-        if (index < 0 || index > 2) {
-            throw std::runtime_error("dynamic stat index is out of range");
-        }
-        return mDynamic[index];
-    }
-
-    inline Spells & 
-    CreatureStats::getSpells() {
-        return mSpells;
-    }
-
-    inline void 
-    CreatureStats::setSpells(const Spells &spells) {
-        mSpells = spells;
-    }
-
-    inline ActiveSpells & 
-    CreatureStats::getActiveSpells() {
-        return mActiveSpells;
-    }
-
-    inline MagicEffects & 
-    CreatureStats::getMagicEffects() {
-        return mMagicEffects;
-    }
-
-    // Inline setters
-
-    inline void
-    CreatureStats::setAttribute(int index, const Stat<int> &value) {
-        if (index < 0 || index > 7) {
-            throw std::runtime_error("attribute index is out of range");
-        }
-        mAttributes[index] = value;
-    }
-
-    inline void
-    CreatureStats::setHealth(const DynamicStat<int> &value) {
-        mDynamic[0] = value;
-    }
-
-    inline void
-    CreatureStats::setMagicka(const DynamicStat<int> &value) {
-        mDynamic[1] = value;
-    }
-
-    inline void
-    CreatureStats::setFatigue(const DynamicStat<int> &value) {
-        mDynamic[2] = value;
-    }
-
-    inline void
-    CreatureStats::setLevel(int level) {
-        mLevel = level;
-    }
-
-    inline void 
-    CreatureStats::setActiveSpells(const ActiveSpells &active) {
-        mActiveSpells = active;
-    }
-
-    inline void 
-    CreatureStats::setMagicEffects(const MagicEffects &effects) {
-        mMagicEffects = effects;
-    }
-
-    inline void
-    CreatureStats::setHello(int value) {
-        mHello = value;
-    }
-
-    inline void
-    CreatureStats::setFight(int value) {
-        mFight = value;
-    }
-
-    inline void
-    CreatureStats::setFlee(int value) {
-        mFlee = value;
-    }
-
-    inline void
-    CreatureStats::setAlarm(int value) {
-        mAlarm = value;
-    }
 }
 
 #endif

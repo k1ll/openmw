@@ -1,9 +1,8 @@
 #include "actionopen.hpp"
 
 #include "../mwbase/environment.hpp"
+#include "../mwbase/windowmanager.hpp"
 
-#include "../mwclass/container.hpp"
-#include "../mwgui/window_manager.hpp"
 #include "../mwgui/container.hpp"
 
 #include "class.hpp"
@@ -11,16 +10,16 @@
 
 namespace MWWorld
 {
-    ActionOpen::ActionOpen (const MWWorld::Ptr& container) : mContainer (container) {
-        mContainer = container;
+    ActionOpen::ActionOpen (const MWWorld::Ptr& container) : Action (false, container)
+    {
     }
 
-    void ActionOpen::execute ()
+    void ActionOpen::executeImp (const MWWorld::Ptr& actor)
     {
         if (!MWBase::Environment::get().getWindowManager()->isAllowed(MWGui::GW_Inventory))
             return;
 
         MWBase::Environment::get().getWindowManager()->pushGuiMode(MWGui::GM_Container);
-        MWBase::Environment::get().getWindowManager()->getContainerWindow()->open(mContainer);
+        MWBase::Environment::get().getWindowManager()->getContainerWindow()->open(getTarget());
     }
 }

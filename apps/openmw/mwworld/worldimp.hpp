@@ -1,12 +1,11 @@
 #ifndef GAME_MWWORLD_WORLDIMP_H
 #define GAME_MWWORLD_WORLDIMP_H
 
-#include <components/esm_store/store.hpp>
-
 #include "../mwrender/debugging.hpp"
 
 #include "ptr.hpp"
 #include "scene.hpp"
+#include "esmstore.hpp"
 #include "physicssystem.hpp"
 #include "cells.hpp"
 #include "localscripts.hpp"
@@ -38,6 +37,7 @@ namespace MWRender
 {
     class SkyManager;
     class CellRender;
+    class Animation;
 }
 
 namespace MWWorld
@@ -55,13 +55,12 @@ namespace MWWorld
 
             MWWorld::Scene *mWorldScene;
             MWWorld::Player *mPlayer;
-            ESM::ESMReader mEsm;
-            ESMS::ESMStore mStore;
+            std::vector<ESM::ESMReader> mEsm;
+            MWWorld::ESMStore mStore;
             LocalScripts mLocalScripts;
             MWWorld::Globals *mGlobalVariables;
             MWWorld::PhysicsSystem *mPhysics;
             bool mSky;
-            int mNextDynamicRecord;
 
             Cells mCells;
 
@@ -73,11 +72,15 @@ namespace MWWorld
 
             Ptr getPtrViaHandle (const std::string& handle, Ptr::CellStore& cellStore);
 
+            int mActivationDistanceOverride;
             std::string mFacedHandle;
+            float mFacedDistance;
             Ptr mFaced1;
             Ptr mFaced2;
             std::string mFaced1Name;
             std::string mFaced2Name;
+            float mFaced1Distance;
+            float mFaced2Distance;
             int mNumFacing;
             std::map<std::string,std::string> mFallback;
 
@@ -89,12 +92,31 @@ namespace MWWorld
             bool moveObjectImp (const Ptr& ptr, float x, float y, float z);
             ///< @return true if the active cell (cell player is in) changed
 
+            
+            Ptr copyObjectToCell(const Ptr &ptr, CellStore &cell, const ESM::Position &pos);
+
+            void updateWindowManager ();
+            void performUpdateSceneQueries ();
+            void processFacedQueryResults (MWRender::OcclusionQuery* query);
+            void beginFacedQueryProcess (MWRender::OcclusionQuery* query);
+            void beginSingleFacedQueryProcess (MWRender::OcclusionQuery* query, std::vector < std::pair < float, std::string > > const & results);
+            void beginDoubleFacedQueryProcess (MWRender::OcclusionQuery* query, std::vector < std::pair < float, std::string > > const & results);
+
+            float getMaxActivationDistance ();
+            float getNpcActivationDistance ();
+            float getObjectActivationDistance ();
+
+            void removeContainerScripts(const Ptr& reference);
+            void addContainerScripts(const Ptr& reference, Ptr::CellStore* cell);
+            void PCDropped (const Ptr& item);
+
         public:
 
             World (OEngine::Render::OgreRenderer& renderer,
                 const Files::Collections& fileCollections,
-                const std::string& master, const boost::filesystem::path& resDir, bool newGame,
-                const std::string& encoding, std::map<std::string,std::string> fallbackMap);
+                const std::vector<std::string>& master, const std::vector<std::string>& plugins,
+        	const boost::filesystem::path& resDir, const boost::filesystem::path& cacheDir, bool newGame,
+                ToUTF8::Utf8Encoder* encoder, std::map<std::string,std::string> fallbackMap, int mActivationDistanceOverride);
 
             virtual ~World();
 
@@ -121,9 +143,9 @@ namespace MWWorld
 
             virtual Player& getPlayer();
 
-            virtual const ESMS::ESMStore& getStore() const;
+            virtual const MWWorld::ESMStore& getStore() const;
 
-            virtual ESM::ESMReader& getEsmReader();
+            virtual std::vector<ESM::ESMReader>& getEsmReader();
 
             virtual LocalScripts& getLocalScripts();
 
@@ -137,12 +159,28 @@ namespace MWWorld
             virtual Ogre::Vector2 getNorthVector (CellStore* cell);
             ///< get north vector (OGRE coordinates) for given interior cell
 
+            virtual std::vector<DoorMarker> getDoorMarkers (MWWorld::CellStore* cell);
+            ///< get a list of teleport door markers for a given cell, to be displayed on the local map
+
+            virtual void getInteriorMapPosition (Ogre::Vector2 position, float& nX, float& nY, int &x, int& y);
+            ///< see MWRender::LocalMap::getInteriorMapPosition
+
+            virtual bool isPositionExplored (float nX, float nY, int x, int y, bool interior);
+            ///< see MWRender::LocalMap::isPositionExplored
+
             virtual Globals::Data& getGlobalVariable (const std::string& name);
 
             virtual Globals::Data getGlobalVariable (const std::string& name) const;
 
             virtual char getGlobalVariableType (const std::string& name) const;
             ///< Return ' ', if there is no global variable with this name.
+            
+            virtual std::vector<std::string> getGlobals () const;
+            
+            virtual std::string getCurrentCellName () const;
+            
+            virtual void removeRefScript (MWWorld::RefData *ref);
+            //< Remove the script attached to ref from mLocalScripts
 
             virtual Ptr getPtr (const std::string& name, bool activeOnly);
             ///< Return a pointer to a liveCellRef with the given name.
@@ -150,6 +188,9 @@ namespace MWWorld
 
             virtual Ptr getPtrViaHandle (const std::string& handle);
             ///< Return a pointer to a liveCellRef with the given Ogre handle.
+
+            virtual Ptr searchPtrViaHandle (const std::string& handle);
+            ///< Return a pointer to a liveCellRef with the given Ogre handle or Ptr() if not found
 
             virtual void enable (const Ptr& ptr);
 
@@ -166,6 +207,9 @@ namespace MWWorld
 
             virtual void setDay (int day);
             ///< Set in-game time day.
+
+            virtual int getDay();
+            virtual int getMonth();
 
             virtual TimeStamp getTimeStamp() const;
             ///< Return current in-game time stamp.
@@ -197,16 +241,22 @@ namespace MWWorld
 
             virtual void markCellAsUnchanged();
 
-            virtual std::string getFacedHandle();
-            ///< Return handle of the object the player is looking at
+            virtual MWWorld::Ptr getFacedObject();
+            ///< Return pointer to the object the player is looking at, if it is within activation range
 
             virtual void deleteObject (const Ptr& ptr);
 
             virtual void moveObject (const Ptr& ptr, float x, float y, float z);
+            virtual void moveObject (const Ptr& ptr, CellStore &newCell, float x, float y, float z);
 
             virtual void scaleObject (const Ptr& ptr, float scale);
 
-            virtual void rotateObject (const Ptr& ptr,float x,float y,float z);
+            /// Rotates object, uses degrees
+            /// \param adjust indicates rotation should be set or adjusted
+            virtual void rotateObject (const Ptr& ptr,float x,float y,float z, bool adjust = false);
+
+            virtual void safePlaceObject(const MWWorld::Ptr& ptr,MWWorld::CellStore &Cell,ESM::Position pos);
+            ///< place an object in a "safe" location (ie not in the void, etc). Makes a copy of the Ptr.
 
             virtual void indexToPosition (int cellX, int cellY, float &x, float &y, bool centre = false)
                 const;
@@ -215,8 +265,7 @@ namespace MWWorld
             virtual void positionToIndex (float x, float y, int &cellX, int &cellY) const;
             ///< Convert position to cell numbers
 
-            virtual void doPhysics (const std::vector<std::pair<std::string, Ogre::Vector3> >& actors,
-                float duration);
+            virtual void doPhysics(const PtrMovementList &actors, float duration);
             ///< Run physics simulation and modify \a world accordingly.
 
             virtual bool toggleCollisionMode();
@@ -228,31 +277,28 @@ namespace MWWorld
             ///< Toggle a render mode.
             ///< \return Resulting mode
 
-            virtual std::pair<std::string, const ESM::Potion *> createRecord (const ESM::Potion& record);
+            virtual const ESM::Potion *createRecord (const ESM::Potion& record);
             ///< Create a new recrod (of type potion) in the ESM store.
-            /// \return ID, pointer to created record
+            /// \return pointer to created record
 
-            virtual std::pair<std::string, const ESM::Class *> createRecord (const ESM::Class& record);
+            virtual const ESM::Spell *createRecord (const ESM::Spell& record);
+            ///< Create a new recrod (of type spell) in the ESM store.
+            /// \return pointer to created record
+
+            virtual const ESM::Class *createRecord (const ESM::Class& record);
             ///< Create a new recrod (of type class) in the ESM store.
-            /// \return ID, pointer to created record
+            /// \return pointer to created record
 
             virtual const ESM::Cell *createRecord (const ESM::Cell& record);
             ///< Create a new recrod (of type cell) in the ESM store.
-            /// \return ID, pointer to created record
+            /// \return pointer to created record
 
-            virtual void playAnimationGroup (const MWWorld::Ptr& ptr, const std::string& groupName,
-                int mode, int number = 1);
-            ///< Run animation for a MW-reference. Calls to this function for references that are
-            /// currently not in the rendered scene should be ignored.
-            ///
-            /// \param mode: 0 normal, 1 immediate start, 2 immediate loop
-            /// \param number How offen the animation should be run
+            virtual const ESM::NPC *createRecord(const ESM::NPC &record);
+            ///< Create a new recrod (of type npc) in the ESM store.
+            /// \return pointer to created record
 
-            virtual void skipAnimation (const MWWorld::Ptr& ptr);
-            ///< Skip the animation for the given MW-reference for one frame. Calls to this function for
-            /// references that are currently not in the rendered scene should be ignored.
 
-            virtual void update (float duration);
+            virtual void update (float duration, bool paused);
 
             virtual bool placeObject (const Ptr& object, float cursorX, float cursorY);
             ///< place an object into the gameworld at the specified cursor position
@@ -261,12 +307,55 @@ namespace MWWorld
             /// @param cursor Y (relative 0-1)
             /// @return true if the object was placed, or false if it was rejected because the position is too far away
 
-            virtual void dropObjectOnGround (const Ptr& object);
+            virtual void dropObjectOnGround (const Ptr& actor, const Ptr& object);
 
             virtual bool canPlaceObject(float cursorX, float cursorY);
             ///< @return true if it is possible to place on object at specified cursor location
 
             virtual void processChangedSettings(const Settings::CategorySettingVector& settings);
+
+            virtual bool isFlying(const MWWorld::Ptr &ptr) const;
+            virtual bool isSwimming(const MWWorld::Ptr &object) const;
+            virtual bool isUnderwater(const MWWorld::Ptr::CellStore* cell, const Ogre::Vector3 &pos) const;
+            virtual bool isOnGround(const MWWorld::Ptr &ptr) const;
+
+            virtual void togglePOV() {
+                mRendering->togglePOV();
+            }
+
+            virtual void togglePreviewMode(bool enable) {
+                mRendering->togglePreviewMode(enable);
+            }
+
+            virtual bool toggleVanityMode(bool enable, bool force) {
+                return mRendering->toggleVanityMode(enable, force);
+            }
+
+            virtual void allowVanityMode(bool allow) {
+                mRendering->allowVanityMode(allow);
+            }
+
+            virtual void togglePlayerLooking(bool enable) {
+                mRendering->togglePlayerLooking(enable);
+            }
+
+            virtual void renderPlayer();
+
+            virtual void setupExternalRendering (MWRender::ExternalRendering& rendering);
+
+            virtual int canRest();
+            ///< check if the player is allowed to rest \n
+            /// 0 - yes \n
+            /// 1 - only waiting \n
+            /// 2 - player is underwater \n
+            /// 3 - enemies are nearby (not implemented)
+
+            /// \todo Probably shouldn't be here
+            virtual MWRender::Animation* getAnimation(const MWWorld::Ptr &ptr);
+
+            /// \todo this does not belong here
+            virtual void playVideo(const std::string& name, bool allowSkipping);
+            virtual void stopVideo();
     };
 }
 

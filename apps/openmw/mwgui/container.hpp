@@ -1,7 +1,7 @@
 #ifndef MGUI_CONTAINER_H
 #define MGUI_CONTAINER_H
 
-#include <components/esm_store/store.hpp>
+#include "../mwworld/esmstore.hpp"
 
 #include "window_base.hpp"
 #include "referenceinterface.hpp"
@@ -127,7 +127,7 @@ namespace MWGui
     class ContainerWindow : public ContainerBase, public WindowBase
     {
     public:
-        ContainerWindow(WindowManager& parWindowManager,DragAndDrop* dragAndDrop);
+        ContainerWindow(MWBase::WindowManager& parWindowManager,DragAndDrop* dragAndDrop);
 
         virtual ~ContainerWindow();
 

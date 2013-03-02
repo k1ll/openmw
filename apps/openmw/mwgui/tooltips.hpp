@@ -9,12 +9,14 @@
 
 namespace MWGui
 {
-    class WindowManager;
-
     // Info about tooltip that is supplied by the MWWorld::Class object
     struct ToolTipInfo
     {
     public:
+        ToolTipInfo()
+            : isPotion(false)
+        {}
+
         std::string caption;
         std::string text;
         std::string icon;
@@ -24,12 +26,14 @@ namespace MWGui
 
         // effects (for potions, ingredients)
         Widgets::SpellEffectList effects;
+
+        bool isPotion; // potions do not show target in the tooltip
     };
 
     class ToolTips : public OEngine::GUI::Layout
     {
     public:
-        ToolTips(WindowManager* windowManager);
+        ToolTips(MWBase::WindowManager* windowManager);
 
         void onFrame(float frameDuration);
 
@@ -45,7 +49,7 @@ namespace MWGui
 
         void setFocusObject(const MWWorld::Ptr& focus);
         void setFocusObjectScreenCoords(float min_x, float min_y, float max_x, float max_y);
-        ///< set the screen-space position of the tooltip for focused object 
+        ///< set the screen-space position of the tooltip for focused object
 
         static std::string getValueString(const int value, const std::string& prefix);
         ///< @return "prefix: value" or "" if value is 0
@@ -67,11 +71,12 @@ namespace MWGui
         static void createBirthsignToolTip(MyGUI::Widget* widget, const std::string& birthsignId);
         static void createRaceToolTip(MyGUI::Widget* widget, const ESM::Race* playerRace);
         static void createClassToolTip(MyGUI::Widget* widget, const ESM::Class& playerClass);
+        static void createMagicEffectToolTip(MyGUI::Widget* widget, short id);
 
     private:
         MyGUI::Widget* mDynamicToolTipBox;
 
-        WindowManager* mWindowManager;
+        MWBase::WindowManager* mWindowManager;
 
         MWWorld::Ptr mFocusObject;
 
@@ -85,6 +90,9 @@ namespace MWGui
 
         float mFocusToolTipX;
         float mFocusToolTipY;
+	
+	int mHorizontalScrollIndex;
+	
 
         float mDelay;
         float mRemainingDelay; // remaining time until tooltip will show

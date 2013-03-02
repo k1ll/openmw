@@ -1,7 +1,7 @@
 #ifndef MWGUI_STATS_WINDOW_H
 #define MWGUI_STATS_WINDOW_H
 
-#include <components/esm_store/store.hpp>
+#include "../mwworld/esmstore.hpp"
 
 #include <sstream>
 #include <set>
@@ -22,7 +22,7 @@ namespace MWGui
 
             typedef std::vector<int> SkillList;
 
-            StatsWindow(WindowManager& parWindowManager);
+            StatsWindow(MWBase::WindowManager& parWindowManager);
 
             /// automatically updates all the data in the stats window, but only if it has changed.
             void onFrame();
@@ -32,14 +32,14 @@ namespace MWGui
 
             /// Set value for the given ID.
             void setValue (const std::string& id, const MWMechanics::Stat<int>& value);
-            void setValue (const std::string& id, const MWMechanics::DynamicStat<int>& value);
+            void setValue (const std::string& id, const MWMechanics::DynamicStat<float>& value);
             void setValue (const std::string& id, const std::string& value);
             void setValue (const std::string& id, int value);
             void setValue(const ESM::Skill::SkillEnum parSkill, const MWMechanics::Stat<float>& value);
 
             void configureSkills (const SkillList& major, const SkillList& minor);
-            void setReputation (int reputation) { this->mReputation = reputation; }
-            void setBounty (int bounty) { this->mBounty = bounty; }
+            void setReputation (int reputation) { if (reputation != mReputation) mChanged = true; this->mReputation = reputation; }
+            void setBounty (int bounty) { if (bounty != mBounty) mChanged = true; this->mBounty = bounty; }
             void updateSkillArea();
 
         private:
@@ -48,12 +48,11 @@ namespace MWGui
             void addGroup(const std::string &label, MyGUI::IntCoord &coord1, MyGUI::IntCoord &coord2);
             MyGUI::TextBox* addValueItem(const std::string& text, const std::string &value, const std::string& state, MyGUI::IntCoord &coord1, MyGUI::IntCoord &coord2);
             MyGUI::Widget* addItem(const std::string& text, MyGUI::IntCoord &coord1, MyGUI::IntCoord &coord2);
-            void updateScroller();
 
             void setFactions (const FactionList& factions);
+            void setExpelled (const std::set<std::string>& expelled);
             void setBirthSign (const std::string &signId);
 
-            void onScrollChangePosition(MyGUI::ScrollBar* scroller, size_t pos);
             void onWindowResize(MyGUI::Window* window);
             void onMouseWheel(MyGUI::Widget* _sender, int _rel);
 
@@ -62,8 +61,7 @@ namespace MWGui
             MyGUI::Widget* mLeftPane;
             MyGUI::Widget* mRightPane;
 
-            MyGUI::WidgetPtr mSkillAreaWidget, mSkillClientWidget;
-            MyGUI::ScrollBar* mSkillScrollerWidget;
+            MyGUI::ScrollView* mSkillView;
             int mLastPos, mClientHeight;
 
             SkillList mMajorSkills, mMinorSkills, mMiscSkills;
@@ -74,6 +72,7 @@ namespace MWGui
             std::string mBirthSignId;
             int mReputation, mBounty;
             std::vector<MyGUI::WidgetPtr> mSkillWidgets; //< Skills and other information
+            std::set<std::string> mExpelled;
 
             bool mChanged;
 
@@ -82,4 +81,3 @@ namespace MWGui
     };
 }
 #endif
-

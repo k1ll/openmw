@@ -13,33 +13,55 @@
 #include <OgreCompositionTargetPass.h>
 #include <OgreCompositionPass.h>
 #include <OgreHardwarePixelBuffer.h>
+#include <OgreControllerManager.h>
+
+#include <extern/shiny/Main/Factory.hpp>
+#include <extern/shiny/Platforms/Ogre/OgrePlatform.hpp>
+
+#include <openengine/bullet/physic.hpp>
 
 #include <components/esm/loadstat.hpp>
 #include <components/settings/settings.hpp>
+#include "../mwworld/esmstore.hpp"
+#include "../mwworld/class.hpp"
 
 #include "../mwbase/world.hpp" // these includes can be removed once the static-hack is gone
 #include "../mwbase/environment.hpp"
+#include "../mwbase/inputmanager.hpp" // FIXME
+#include "../mwbase/windowmanager.hpp" // FIXME
 
 #include "../mwworld/ptr.hpp"
 #include "../mwworld/player.hpp"
 
-#include "../mwgui/window_manager.hpp" // FIXME
-#include "../mwinput/inputmanager.hpp" // FIXME
-
 #include "shadows.hpp"
-#include "shaderhelper.hpp"
 #include "localmap.hpp"
 #include "water.hpp"
 #include "compositors.hpp"
+#include "npcanimation.hpp"
+#include "externalrendering.hpp"
+#include "globalmap.hpp"
+#include "videoplayer.hpp"
 
 using namespace MWRender;
 using namespace Ogre;
 
 namespace MWRender {
 
-RenderingManager::RenderingManager (OEngine::Render::OgreRenderer& _rend, const boost::filesystem::path& resDir, OEngine::Physic::PhysicEngine* engine)
-    :mRendering(_rend), mObjects(mRendering), mActors(mRendering), mAmbientMode(0), mSunEnabled(0)
+RenderingManager::RenderingManager (OEngine::Render::OgreRenderer& _rend, const boost::filesystem::path& resDir,
+                                    const boost::filesystem::path& cacheDir, OEngine::Physic::PhysicEngine* engine)
+    : mRendering(_rend), mObjects(mRendering), mActors(mRendering), mAmbientMode(0), mSunEnabled(0), mPhysicsEngine(engine)
 {
+    // select best shader mode
+    bool openGL = (Ogre::Root::getSingleton ().getRenderSystem ()->getName().find("OpenGL") != std::string::npos);
+
+    // glsl is only supported in opengl mode and hlsl only in direct3d mode.
+    if (Settings::Manager::getString("shader mode", "General") == ""
+            || (openGL && Settings::Manager::getString("shader mode", "General") == "hlsl")
+            || (!openGL && Settings::Manager::getString("shader mode", "General") == "glsl"))
+    {
+        Settings::Manager::setString("shader mode", "General", openGL ? "glsl" : "hlsl");
+    }
+
     mRendering.createScene("PlayerCam", Settings::Manager::getFloat("field of view", "General"), 5);
     mRendering.setWindowEventListener(this);
 
@@ -47,9 +69,28 @@ RenderingManager::RenderingManager (OEngine::Render::OgreRenderer& _rend, const 
 
     mWater = 0;
 
-    //The fog type must be set before any terrain objects are created as if the
-    //fog type is set to FOG_NONE then the initially created terrain won't have any fog
-    configureFog(1, ColourValue(1,1,1));
+    // material system
+    sh::OgrePlatform* platform = new sh::OgrePlatform("General", (resDir / "materials").string());
+    if (!boost::filesystem::exists (cacheDir))
+        boost::filesystem::create_directories (cacheDir);
+    platform->setCacheFolder (cacheDir.string());
+    mFactory = new sh::Factory(platform);
+
+    sh::Language lang;
+    std::string l = Settings::Manager::getString("shader mode", "General");
+    if (l == "glsl")
+        lang = sh::Language_GLSL;
+    else if (l == "hlsl")
+        lang = sh::Language_HLSL;
+    else
+        lang = sh::Language_CG;
+    mFactory->setCurrentLanguage (lang);
+    mFactory->setWriteSourceCache (true);
+    mFactory->setReadSourceCache (true);
+    mFactory->setReadMicrocodeCache (true);
+    mFactory->setWriteMicrocodeCache (true);
+
+    mFactory->loadAllFiles();
 
     // Set default mipmap level (NB some APIs ignore this)
     TextureManager::getSingleton().setDefaultNumMipmaps(Settings::Manager::getInt("num mipmaps", "General"));
@@ -60,58 +101,69 @@ RenderingManager::RenderingManager (OEngine::Render::OgreRenderer& _rend, const 
     if (filter == "anisotropic") tfo = TFO_ANISOTROPIC;
     else if (filter == "trilinear") tfo = TFO_TRILINEAR;
     else if (filter == "bilinear") tfo = TFO_BILINEAR;
-    else if (filter == "none") tfo = TFO_NONE;
+    else /*if (filter == "none")*/ tfo = TFO_NONE;
 
     MaterialManager::getSingleton().setDefaultTextureFiltering(tfo);
     MaterialManager::getSingleton().setDefaultAnisotropy( (filter == "anisotropic") ? Settings::Manager::getInt("anisotropy", "General") : 1 );
 
-    // Load resources
+    //ResourceGroupManager::getSingleton ().declareResource ("GlobalMap.png", "Texture", ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
+
     ResourceGroupManager::getSingleton().initialiseAllResourceGroups();
 
-    // Due to the huge world size of MW, we'll want camera-relative rendering.
-    // This prevents precision artifacts when moving very far from the origin.
-    mRendering.getScene()->setCameraRelativeRendering(true);
+    // causes light flicker in opengl when moving..
+    //mRendering.getScene()->setCameraRelativeRendering(true);
 
     // disable unsupported effects
-    const RenderSystemCapabilities* caps = Root::getSingleton().getRenderSystem()->getCapabilities();
+    //const RenderSystemCapabilities* caps = Root::getSingleton().getRenderSystem()->getCapabilities();
     if (!waterShaderSupported())
         Settings::Manager::setBool("shader", "Water", false);
-    if ( !(caps->isShaderProfileSupported("fp40") || caps->isShaderProfileSupported("ps_4_0"))
-        || !Settings::Manager::getBool("shaders", "Objects"))
+    if (!Settings::Manager::getBool("shaders", "Objects"))
         Settings::Manager::setBool("enabled", "Shadows", false);
+
+    sh::Factory::getInstance ().setShadersEnabled (Settings::Manager::getBool("shaders", "Objects"));
+
+    sh::Factory::getInstance ().setGlobalSetting ("mrt_output", useMRT() ? "true" : "false");
+    sh::Factory::getInstance ().setGlobalSetting ("fog", "true");
+    sh::Factory::getInstance ().setGlobalSetting ("lighting", "true");
+    sh::Factory::getInstance ().setGlobalSetting ("num_lights", Settings::Manager::getString ("num lights", "Objects"));
+    sh::Factory::getInstance ().setGlobalSetting ("terrain_num_lights", Settings::Manager::getString ("num lights", "Terrain"));
+    sh::Factory::getInstance ().setGlobalSetting ("underwater_effects", Settings::Manager::getString("underwater effect", "Water"));
+    sh::Factory::getInstance ().setGlobalSetting ("simple_water", Settings::Manager::getBool("shader", "Water") ? "false" : "true");
+
+    sh::Factory::getInstance ().setSharedParameter ("viewportBackground", sh::makeProperty<sh::Vector3> (new sh::Vector3(0,0,0)));
+    sh::Factory::getInstance ().setSharedParameter ("waterEnabled", sh::makeProperty<sh::FloatValue> (new sh::FloatValue(0.0)));
+    sh::Factory::getInstance ().setSharedParameter ("waterLevel", sh::makeProperty<sh::FloatValue>(new sh::FloatValue(0)));
+    sh::Factory::getInstance ().setSharedParameter ("waterTimer", sh::makeProperty<sh::FloatValue>(new sh::FloatValue(0)));
+    sh::Factory::getInstance ().setSharedParameter ("windDir_windSpeed", sh::makeProperty<sh::Vector3>(new sh::Vector3(0.5, -0.8, 0.2)));
+    sh::Factory::getInstance ().setSharedParameter ("waterSunFade_sunHeight", sh::makeProperty<sh::Vector2>(new sh::Vector2(1, 0.6)));
+    sh::Factory::getInstance ().setSharedParameter ("gammaCorrection", sh::makeProperty<sh::FloatValue>(new sh::FloatValue(
+            Settings::Manager::getFloat ("gamma", "Video"))));
 
     applyCompositors();
 
-    // Turn the entire scene (represented by the 'root' node) -90
-    // degrees around the x axis. This makes Z go upwards, and Y go into
-    // the screen (when x is to the right.) This is the orientation that
-    // Morrowind uses, and it automagically makes everything work as it
-    // should.
     SceneNode *rt = mRendering.getScene()->getRootSceneNode();
-    mMwRoot = rt->createChildSceneNode();
-    mMwRoot->pitch(Degree(-90));
-    mObjects.setMwRoot(mMwRoot);
-    mActors.setMwRoot(mMwRoot);
+    mRootNode = rt;
 
-    Ogre::SceneNode *playerNode = mMwRoot->createChildSceneNode ("player");
-    playerNode->pitch(Degree(90));
-    Ogre::SceneNode *cameraYawNode = playerNode->createChildSceneNode();
-    Ogre::SceneNode *cameraPitchNode = cameraYawNode->createChildSceneNode();
-    cameraPitchNode->attachObject(mRendering.getCamera());
+    mObjects.setRootNode(mRootNode);
+    mActors.setRootNode(mRootNode);
+
+    Ogre::SceneNode *playerNode = mRootNode->createChildSceneNode ("player");
+    mPlayer = new MWRender::Player (mRendering.getCamera(), playerNode);
 
     mShadows = new Shadows(&mRendering);
-    mShaderHelper = new ShaderHelper(this);
 
     mTerrainManager = new TerrainManager(mRendering.getScene(), this);
 
-    mSkyManager = new SkyManager(mMwRoot, mRendering.getCamera());
+    mSkyManager = new SkyManager(mRootNode, mRendering.getCamera());
 
     mOcclusionQuery = new OcclusionQuery(&mRendering, mSkyManager->getSunNode());
 
-    mPlayer = new MWRender::Player (mRendering.getCamera(), playerNode);
+    mVideoPlayer = new VideoPlayer(mRendering.getScene ());
+    mVideoPlayer->setResolution (Settings::Manager::getInt ("resolution x", "Video"), Settings::Manager::getInt ("resolution y", "Video"));
+
     mSun = 0;
 
-    mDebugging = new Debugging(mMwRoot, engine);
+    mDebugging = new Debugging(mRootNode, engine);
     mLocalMap = new MWRender::LocalMap(&mRendering, this);
 
     setMenuTransparency(Settings::Manager::getFloat("menu transparency", "GUI"));
@@ -124,13 +176,14 @@ RenderingManager::~RenderingManager ()
     delete mPlayer;
     delete mSkyManager;
     delete mDebugging;
-    delete mShaderHelper;
     delete mShadows;
     delete mTerrainManager;
     delete mLocalMap;
     delete mOcclusionQuery;
     delete mCompositors;
     delete mWater;
+    delete mVideoPlayer;
+    delete mFactory;
 }
 
 MWRender::SkyManager* RenderingManager::getSkyManager()
@@ -145,10 +198,6 @@ MWRender::Actors& RenderingManager::getActors(){
     return mActors;
 }
 
-MWRender::Player& RenderingManager::getPlayer(){
-    return (*mPlayer);
-}
-
 OEngine::Render::Fader* RenderingManager::getFader()
 {
     return mRendering.getFader();
@@ -159,7 +208,7 @@ void RenderingManager::removeCell (MWWorld::Ptr::CellStore *store)
     mObjects.removeCell(store);
     mActors.removeCell(store);
     mDebugging->cellRemoved(store);
-    if (store->cell->isExterior())
+    if (store->mCell->isExterior())
       mTerrainManager->cellRemoved(store);
 }
 
@@ -180,7 +229,7 @@ void RenderingManager::cellAdded (MWWorld::Ptr::CellStore *store)
 {
     mObjects.buildStaticGeometry (*store);
     mDebugging->cellAdded(store);
-    if (store->cell->isExterior())
+    if (store->mCell->isExterior())
       mTerrainManager->cellAdded(store);
     waterAdded(store);
 }
@@ -189,65 +238,165 @@ void RenderingManager::addObject (const MWWorld::Ptr& ptr){
     const MWWorld::Class& class_ =
             MWWorld::Class::get (ptr);
     class_.insertObjectRendering(ptr, *this);
-
 }
+
 void RenderingManager::removeObject (const MWWorld::Ptr& ptr)
 {
     if (!mObjects.deleteObject (ptr))
-    {
-        /// \todo delete non-object MW-references
-    }
-     if (!mActors.deleteObject (ptr))
-    {
-        /// \todo delete non-object MW-references
-    }
+        mActors.deleteObject (ptr);
 }
 
 void RenderingManager::moveObject (const MWWorld::Ptr& ptr, const Ogre::Vector3& position)
 {
     /// \todo move this to the rendering-subsystems
-    mRendering.getScene()->getSceneNode (ptr.getRefData().getHandle())->
-            setPosition (position);
+    ptr.getRefData().getBaseNode()->setPosition(position);
 }
 
-void RenderingManager::scaleObject (const MWWorld::Ptr& ptr, const Ogre::Vector3& scale){
-
-}
-void RenderingManager::rotateObject (const MWWorld::Ptr& ptr, const::Ogre::Quaternion& orientation){
-
-}
-void RenderingManager::moveObjectToCell (const MWWorld::Ptr& ptr, const Ogre::Vector3& position, MWWorld::Ptr::CellStore *store){
-
+void RenderingManager::scaleObject (const MWWorld::Ptr& ptr, const Ogre::Vector3& scale)
+{
+    ptr.getRefData().getBaseNode()->setScale(scale);
 }
 
-void RenderingManager::update (float duration){
+bool RenderingManager::rotateObject( const MWWorld::Ptr &ptr, Ogre::Vector3 &rot, bool adjust)
+{
+    bool isActive = ptr.getRefData().getBaseNode() != 0;
+    bool isPlayer = isActive && ptr.getRefData().getHandle() == "player";
+    bool force = true;
+    
+    if (isPlayer)
+        force = mPlayer->rotate(rot, adjust);
+    
+    MWWorld::Class::get(ptr).adjustRotation(ptr, rot.x, rot.y, rot.z);
+
+    if (!isPlayer && isActive)
+    {
+        Ogre::Quaternion xr(Ogre::Radian(rot.x), Ogre::Vector3::UNIT_X);
+        Ogre::Quaternion yr(Ogre::Radian(rot.y), Ogre::Vector3::UNIT_Y);
+        Ogre::Quaternion zr(Ogre::Radian(rot.z), Ogre::Vector3::UNIT_Z);
+        Ogre::Quaternion newo = adjust ? (xr * yr * zr) * ptr.getRefData().getBaseNode()->getOrientation() : xr * yr * zr;
+        rot.x = newo.x;
+        rot.y = newo.y;
+        rot.z = newo.z;
+        ptr.getRefData().getBaseNode()->setOrientation(newo);
+    }
+    else if(isPlayer)
+    {
+        rot.x = mPlayer->getPitch();
+        rot.z = mPlayer->getYaw();
+    }
+    else if (adjust)
+    {
+        // Stored and passed in radians
+        float *f = ptr.getRefData().getPosition().rot;
+        rot.x += f[0];
+        rot.y += f[1];
+        rot.z += f[2];
+    }
+    return force;
+}
+
+void
+RenderingManager::updateObjectCell(const MWWorld::Ptr &old, const MWWorld::Ptr &cur)
+{
+    Ogre::SceneNode *child =
+        mRendering.getScene()->getSceneNode(old.getRefData().getHandle());
+
+    Ogre::SceneNode *parent = child->getParentSceneNode();
+    parent->removeChild(child);
+
+    if (MWWorld::Class::get(old).isActor()) {
+        mActors.updateObjectCell(old, cur);
+    } else {
+        mObjects.updateObjectCell(old, cur);
+    }
+}
+
+void RenderingManager::update (float duration, bool paused)
+{
+    Ogre::Vector3 orig, dest;
+    mPlayer->setCameraDistance();
+    if (!mPlayer->getPosition(orig, dest)) {
+        orig.z += mPlayer->getHeight() * mRootNode->getScale().z;
+
+        btVector3 btOrig(orig.x, orig.y, orig.z);
+        btVector3 btDest(dest.x, dest.y, dest.z);
+        std::pair<std::string, float> test =
+            mPhysicsEngine->rayTest(btOrig, btDest);
+        if (!test.first.empty()) {
+            mPlayer->setCameraDistance(test.second * orig.distance(dest), false, false);
+        }
+    }
+    mOcclusionQuery->update(duration);
+    
+    mVideoPlayer->update ();
+
+    mRendering.update(duration);
+
+    if(paused)
+    {
+        Ogre::ControllerManager::getSingleton().setTimeFactor(0.f);
+        return;
+    }
+    Ogre::ControllerManager::getSingleton().setTimeFactor(
+                MWBase::Environment::get().getWorld()->getTimeScaleFactor()/30.f);
+
+    mPlayer->update(duration);
 
     mActors.update (duration);
     mObjects.update (duration);
 
-    mOcclusionQuery->update(duration);
 
     mSkyManager->update(duration);
 
     mSkyManager->setGlare(mOcclusionQuery->getSunVisibility());
 
-    mRendering.update(duration);
+    MWWorld::RefData &data = 
+        MWBase::Environment::get()
+            .getWorld()
+            ->getPlayer()
+            .getPlayer()
+            .getRefData();
 
-    mLocalMap->updatePlayer( mRendering.getCamera()->getRealPosition(), mRendering.getCamera()->getRealOrientation() );
+    float *fpos = data.getPosition().pos;
 
-    checkUnderwater();
+    // only for LocalMap::updatePlayer()
+    Ogre::Vector3 pos(fpos[0], fpos[1], fpos[2]);
 
-    mWater->update();
+    Ogre::SceneNode *node = data.getBaseNode();
+    //Ogre::Quaternion orient =
+        //node->convertLocalToWorldOrientation(node->_getDerivedOrientation());
+    Ogre::Quaternion orient =
+node->_getDerivedOrientation();
+
+    mLocalMap->updatePlayer(pos, orient);
+
+    if (mWater) {
+        Ogre::Vector3 cam = mRendering.getCamera()->getRealPosition();
+
+        MWBase::World *world = MWBase::Environment::get().getWorld();
+
+        mWater->updateUnderwater(
+            world->isUnderwater(
+                world->getPlayer().getPlayer().getCell(),
+                cam)
+        );
+        mWater->update(duration);
+    }
 }
-void RenderingManager::waterAdded (MWWorld::Ptr::CellStore *store){
-    if(store->cell->data.flags & store->cell->HasWater
-        || ((!(store->cell->data.flags & ESM::Cell::Interior))
-            && !MWBase::Environment::get().getWorld()->getStore().lands.search(store->cell->data.gridX,store->cell->data.gridY) )) // always use water, if the cell does not have land.
+
+void RenderingManager::waterAdded (MWWorld::Ptr::CellStore *store)
+{
+    const MWWorld::Store<ESM::Land> &lands =
+        MWBase::Environment::get().getWorld()->getStore().get<ESM::Land>();
+
+    if(store->mCell->mData.mFlags & ESM::Cell::HasWater
+        || ((store->mCell->isExterior())
+            && !lands.search(store->mCell->getGridX(),store->mCell->getGridY()) )) // always use water, if the cell does not have land.
     {
         if(mWater == 0)
-            mWater = new MWRender::Water(mRendering.getCamera(), this, store->cell);
+            mWater = new MWRender::Water(mRendering.getCamera(), this, store->mCell);
         else
-            mWater->changeCell(store->cell);
+            mWater->changeCell(store->mCell);
         mWater->setActive(true);
     }
     else
@@ -324,7 +473,13 @@ bool RenderingManager::toggleRenderMode(int mode)
             return false;
         }
     }
-    else //if (mode == MWWorld::World::Render_Compositors)
+    else if (mode == MWBase::World::Render_BoundingBoxes)
+    {
+        bool show = !mRendering.getScene()->getShowBoundingBoxes();
+        mRendering.getScene()->showBoundingBoxes(show);
+        return show;
+    }
+    else //if (mode == MWBase::World::Render_Compositors)
     {
         return mCompositors->toggle();
     }
@@ -333,9 +488,12 @@ bool RenderingManager::toggleRenderMode(int mode)
 void RenderingManager::configureFog(MWWorld::Ptr::CellStore &mCell)
 {
     Ogre::ColourValue color;
-    color.setAsABGR (mCell.cell->ambi.fog);
+    color.setAsABGR (mCell.mCell->mAmbi.mFog);
 
-    configureFog(mCell.cell->ambi.fogDensity, color);
+    configureFog(mCell.mCell->mAmbi.mFogDensity, color);
+
+    if (mWater)
+        mWater->setViewportBackground (Ogre::ColourValue(0.8f, 0.9f, 1.0f));
 }
 
 void RenderingManager::configureFog(const float density, const Ogre::ColourValue& colour)
@@ -350,11 +508,12 @@ void RenderingManager::configureFog(const float density, const Ogre::ColourValue
     mRendering.getCamera()->setFarClipDistance ( max / density );
     mRendering.getViewport()->setBackgroundColour (colour);
 
-    CompositorInstance* inst = CompositorManager::getSingleton().getCompositorChain(mRendering.getViewport())->getCompositor("gbuffer");
-    if (inst != 0)
-        inst->getCompositor()->getTechnique(0)->getTargetPass(0)->getPass(0)->setClearColour(colour);
     if (mWater)
-        mWater->setViewportBackground(colour);
+        mWater->setViewportBackground (colour);
+
+    sh::Factory::getInstance ().setSharedParameter ("viewportBackground",
+        sh::makeProperty<sh::Vector3> (new sh::Vector3(colour.r, colour.g, colour.b)));
+
 }
 
 
@@ -381,7 +540,7 @@ void RenderingManager::setAmbientMode()
 
 void RenderingManager::configureAmbient(MWWorld::Ptr::CellStore &mCell)
 {
-    mAmbientColor.setAsABGR (mCell.cell->ambi.ambient);
+    mAmbientColor.setAsABGR (mCell.mCell->mAmbi.mAmbient);
     setAmbientMode();
 
     // Create a "sun" that shines light downwards. It doesn't look
@@ -391,7 +550,7 @@ void RenderingManager::configureAmbient(MWWorld::Ptr::CellStore &mCell)
         mSun = mRendering.getScene()->createLight();
     }
     Ogre::ColourValue colour;
-    colour.setAsABGR (mCell.cell->ambi.sunlight);
+    colour.setAsABGR (mCell.mCell->mAmbi.mSunlight);
     mSun->setDiffuseColour (colour);
     mSun->setType(Ogre::Light::LT_DIRECTIONAL);
     mSun->setDirection(0,-1,0);
@@ -413,24 +572,6 @@ void RenderingManager::toggleLight()
     }
 
     setAmbientMode();
-}
-void RenderingManager::checkUnderwater()
-{
-    if(mWater)
-    {
-         mWater->checkUnderwater( mRendering.getCamera()->getRealPosition().y );
-    }
-}
-
-void RenderingManager::playAnimationGroup (const MWWorld::Ptr& ptr, const std::string& groupName,
-     int mode, int number)
-{
-    mActors.playAnimationGroup(ptr, groupName, mode, number);
-}
-
-void RenderingManager::skipAnimation (const MWWorld::Ptr& ptr)
-{
-    mActors.skipAnimation(ptr);
 }
 
 void RenderingManager::setSunColour(const Ogre::ColourValue& colour)
@@ -469,8 +610,7 @@ void RenderingManager::sunDisable()
 void RenderingManager::setSunDirection(const Ogre::Vector3& direction)
 {
     // direction * -1 (because 'direction' is camera to sun vector and not sun to camera),
-    // then convert from MW to ogre coordinates (swap y,z and make y negative)
-    if (mSun) mSun->setDirection(Vector3(-direction.x, -direction.z, direction.y));
+    if (mSun) mSun->setDirection(Vector3(-direction.x, -direction.y, -direction.z));
 
     mSkyManager->setSunDirection(direction);
 }
@@ -482,7 +622,7 @@ void RenderingManager::setGlare(bool glare)
 
 void RenderingManager::requestMap(MWWorld::Ptr::CellStore* cell)
 {
-    if (!(cell->cell->data.flags & ESM::Cell::Interior))
+    if (cell->mCell->isExterior())
         mLocalMap->requestMap(cell);
     else
         mLocalMap->requestMap(cell, mObjects.getDimensions(cell));
@@ -517,12 +657,14 @@ Shadows* RenderingManager::getShadows()
 
 void RenderingManager::switchToInterior()
 {
-    mRendering.getScene()->setCameraRelativeRendering(false);
+    // causes light flicker in opengl when moving..
+    //mRendering.getScene()->setCameraRelativeRendering(false);
 }
 
 void RenderingManager::switchToExterior()
 {
-    mRendering.getScene()->setCameraRelativeRendering(true);
+    // causes light flicker in opengl when moving..
+    //mRendering.getScene()->setCameraRelativeRendering(true);
 }
 
 Ogre::Vector4 RenderingManager::boundingBoxToScreen(Ogre::AxisAlignedBox bounds)
@@ -599,7 +741,7 @@ void RenderingManager::processChangedSettings(const Settings::CategorySettingVec
             if (filter == "anisotropic") tfo = TFO_ANISOTROPIC;
             else if (filter == "trilinear") tfo = TFO_TRILINEAR;
             else if (filter == "bilinear") tfo = TFO_BILINEAR;
-            else if (filter == "none") tfo = TFO_NONE;
+            else /*if (filter == "none")*/ tfo = TFO_NONE;
 
             MaterialManager::getSingleton().setDefaultTextureFiltering(tfo);
             MaterialManager::getSingleton().setDefaultAnisotropy( (filter == "anisotropic") ? Settings::Manager::getInt("anisotropy", "General") : 1 );
@@ -607,7 +749,44 @@ void RenderingManager::processChangedSettings(const Settings::CategorySettingVec
         else if (it->second == "shader" && it->first == "Water")
         {
             applyCompositors();
-            mShaderHelper->applyShaders();
+            sh::Factory::getInstance ().setGlobalSetting ("mrt_output", useMRT() ? "true" : "false");
+            sh::Factory::getInstance ().setGlobalSetting ("simple_water", Settings::Manager::getBool("shader", "Water") ? "false" : "true");
+            mObjects.rebuildStaticGeometry ();
+            mRendering.getViewport ()->setClearEveryFrame (true);
+        }
+        else if (it->second == "underwater effect" && it->first == "Water")
+        {
+            sh::Factory::getInstance ().setGlobalSetting ("underwater_effects", Settings::Manager::getString("underwater effect", "Water"));
+            mObjects.rebuildStaticGeometry ();
+        }
+        else if (it->second == "shaders" && it->first == "Objects")
+        {
+            sh::Factory::getInstance ().setShadersEnabled (Settings::Manager::getBool("shaders", "Objects"));
+            mObjects.rebuildStaticGeometry ();
+        }
+        else if (it->second == "gamma" && it->first == "Video")
+        {
+            sh::Factory::getInstance ().setSharedParameter ("gammaCorrection", sh::makeProperty<sh::FloatValue>(new sh::FloatValue(
+                    Settings::Manager::getFloat ("gamma", "Video"))));
+        }
+        else if (it->second == "shader mode" && it->first == "General")
+        {
+            sh::Language lang;
+            std::string l = Settings::Manager::getString("shader mode", "General");
+            if (l == "glsl")
+                lang = sh::Language_GLSL;
+            else if (l == "hlsl")
+                lang = sh::Language_HLSL;
+            else
+                lang = sh::Language_CG;
+            sh::Factory::getInstance ().setCurrentLanguage (lang);
+            mObjects.rebuildStaticGeometry ();
+        }
+        else if (it->first == "Shadows")
+        {
+            mShadows->recreate ();
+
+            mObjects.rebuildStaticGeometry ();
         }
     }
 
@@ -647,6 +826,8 @@ void RenderingManager::windowResized(Ogre::RenderWindow* rw)
     mCompositors->recreate();
     mWater->assignTextures();
 
+    mVideoPlayer->setResolution (rw->getWidth(), rw->getHeight());
+
     const Settings::CategorySettingVector& changed = Settings::Manager::apply();
     MWBase::Environment::get().getInputManager()->processChangedSettings(changed); //FIXME
     MWBase::Environment::get().getWindowManager()->processChangedSettings(changed); // FIXME
@@ -654,6 +835,7 @@ void RenderingManager::windowResized(Ogre::RenderWindow* rw)
 
 void RenderingManager::windowClosed(Ogre::RenderWindow* rw)
 {
+    Ogre::Root::getSingleton ().queueEndRendering ();
 }
 
 bool RenderingManager::waterShaderSupported()
@@ -671,13 +853,8 @@ void RenderingManager::applyCompositors()
     {
         mCompositors->addCompositor("gbuffer", 0);
         mCompositors->setCompositorEnabled("gbuffer", true);
-        mCompositors->addCompositor("Underwater", 1);
         mCompositors->addCompositor("gbufferFinalizer", 2);
         mCompositors->setCompositorEnabled("gbufferFinalizer", true);
-    }
-    else
-    {
-        mCompositors->addCompositor("UnderwaterNoMRT", 0);
     }
 
     if (mWater)
@@ -695,6 +872,62 @@ void RenderingManager::getTriangleBatchCount(unsigned int &triangles, unsigned i
         triangles = mRendering.getWindow()->getTriangleCount();
         batches = mRendering.getWindow()->getBatchCount();
     }
+}
+
+void RenderingManager::attachCameraTo(const MWWorld::Ptr &ptr)
+{
+    mPlayer->attachTo(ptr);
+}
+
+void RenderingManager::renderPlayer(const MWWorld::Ptr &ptr)
+{
+    MWRender::NpcAnimation *anim =
+        new MWRender::NpcAnimation(
+            ptr, ptr.getRefData ().getBaseNode (),
+            MWWorld::Class::get(ptr).getInventoryStore(ptr), RV_Actors
+        );
+    mPlayer->setAnimation(anim);
+}
+
+void RenderingManager::getPlayerData(Ogre::Vector3 &eyepos, float &pitch, float &yaw)
+{
+    eyepos = mPlayer->getPosition();
+    eyepos.z += mPlayer->getHeight();
+    mPlayer->getSightAngles(pitch, yaw);
+}
+
+void RenderingManager::getInteriorMapPosition (Ogre::Vector2 position, float& nX, float& nY, int &x, int& y)
+{
+    return mLocalMap->getInteriorMapPosition (position, nX, nY, x, y);
+}
+
+bool RenderingManager::isPositionExplored (float nX, float nY, int x, int y, bool interior)
+{
+    return mLocalMap->isPositionExplored(nX, nY, x, y, interior);
+}
+
+void RenderingManager::setupExternalRendering (MWRender::ExternalRendering& rendering)
+{
+    rendering.setup (mRendering.getScene());
+}
+
+Animation* RenderingManager::getAnimation(const MWWorld::Ptr &ptr)
+{
+    Animation *anim = mActors.getAnimation(ptr);
+    if(!anim && ptr.getRefData().getHandle() == "player")
+        anim = mPlayer->getAnimation();
+    return anim;
+}
+
+
+void RenderingManager::playVideo(const std::string& name, bool allowSkipping)
+{
+    mVideoPlayer->playVideo ("video/" + name, allowSkipping);
+}
+
+void RenderingManager::stopVideo()
+{
+    mVideoPlayer->stopVideo ();
 }
 
 } // namespace

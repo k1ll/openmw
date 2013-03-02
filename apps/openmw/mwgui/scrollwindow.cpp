@@ -1,17 +1,21 @@
 #include "scrollwindow.hpp"
 
 #include "../mwbase/environment.hpp"
-#include "../mwinput/inputmanager.hpp"
+#include "../mwbase/world.hpp"
+#include "../mwbase/soundmanager.hpp"
+#include "../mwbase/windowmanager.hpp"
+
 #include "../mwworld/actiontake.hpp"
-#include "../mwsound/soundmanager.hpp"
+#include "../mwworld/player.hpp"
 
 #include "formatting.hpp"
-#include "window_manager.hpp"
 
 using namespace MWGui;
 
-ScrollWindow::ScrollWindow (WindowManager& parWindowManager) :
-    WindowBase("openmw_scroll.layout", parWindowManager)
+ScrollWindow::ScrollWindow (MWBase::WindowManager& parWindowManager)
+    : WindowBase("openmw_scroll.layout", parWindowManager)
+    , mTakeButtonShow(true)
+    , mTakeButtonAllowed(true)
 {
     getWidget(mTextView, "TextView");
 
@@ -34,7 +38,7 @@ void ScrollWindow::open (MWWorld::Ptr scroll)
     MWWorld::LiveCellRef<ESM::Book> *ref = mScroll.get<ESM::Book>();
 
     BookTextParser parser;
-    MyGUI::IntSize size = parser.parse(ref->base->text, mTextView, 390);
+    MyGUI::IntSize size = parser.parse(ref->mBase->mText, mTextView, 390);
 
     if (size.height > mTextView->getSize().height)
         mTextView->setCanvasSize(MyGUI::IntSize(410, size.height));
@@ -48,7 +52,14 @@ void ScrollWindow::open (MWWorld::Ptr scroll)
 
 void ScrollWindow::setTakeButtonShow(bool show)
 {
-    mTakeButton->setVisible(show);
+    mTakeButtonShow = show;
+    mTakeButton->setVisible(mTakeButtonShow && mTakeButtonAllowed);
+}
+
+void ScrollWindow::setInventoryAllowed(bool allowed)
+{
+    mTakeButtonAllowed = allowed;
+    mTakeButton->setVisible(mTakeButtonShow && mTakeButtonAllowed);
 }
 
 void ScrollWindow::onCloseButtonClicked (MyGUI::Widget* _sender)
@@ -60,10 +71,10 @@ void ScrollWindow::onCloseButtonClicked (MyGUI::Widget* _sender)
 
 void ScrollWindow::onTakeButtonClicked (MyGUI::Widget* _sender)
 {
-    MWBase::Environment::get().getSoundManager()->playSound ("Item Book Up", 1.0, 1.0, MWSound::Play_NoTrack);
+    MWBase::Environment::get().getSoundManager()->playSound ("Item Book Up", 1.0, 1.0, MWBase::SoundManager::Play_NoTrack);
 
     MWWorld::ActionTake take(mScroll);
-    take.execute();
+    take.execute (MWBase::Environment::get().getWorld()->getPlayer().getPlayer());
 
     mWindowManager.removeGuiMode(GM_Scroll);
 }

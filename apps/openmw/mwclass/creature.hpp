@@ -1,15 +1,16 @@
 #ifndef GAME_MWCLASS_CREATURE_H
 #define GAME_MWCLASS_CREATURE_H
 
-#include "../mwrender/renderinginterface.hpp"
-#include "../mwrender/actors.hpp"
-
+#include "../mwworld/class.hpp"
 
 namespace MWClass
 {
     class Creature : public MWWorld::Class
     {
             void ensureCustomData (const MWWorld::Ptr& ptr) const;
+
+            virtual MWWorld::Ptr
+            copyToCellImpl(const MWWorld::Ptr &ptr, MWWorld::CellStore &cell) const;
 
         public:
 
@@ -53,7 +54,17 @@ namespace MWClass
             ///< Returns total weight of objects inside this object (including modifications from magic
             /// effects). Throws an exception, if the object can't hold other objects.
 
+            virtual bool isEssential (const MWWorld::Ptr& ptr) const;
+            ///< Is \a ptr essential? (i.e. may losing \a ptr make the game unwinnable)
+            
             static void registerSelf();
+
+            virtual std::string getModel(const MWWorld::Ptr &ptr) const;
+
+            virtual bool
+            isActor() const {
+                return true;
+            }
     };
 }
 

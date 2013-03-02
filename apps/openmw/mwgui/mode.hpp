@@ -20,6 +20,14 @@ namespace MWGui
       GM_Dialogue,      // NPC interaction
       GM_Barter,
       GM_Rest,
+      GM_RestBed,
+      GM_SpellBuying,
+      GM_Travel,
+      GM_SpellCreation,
+      GM_Enchanting,
+      GM_Training,
+
+      GM_Levelup,
 
       // Startup character creation dialogs
       GM_Name,
@@ -32,7 +40,14 @@ namespace MWGui
       GM_Review,
       
       // interactive MessageBox
-      GM_InterMessageBox
+      GM_InterMessageBox,
+
+      GM_Loading,
+      GM_LoadingWallpaper,
+
+      GM_QuickKeysMenu,
+
+      GM_Video
     };
 
   // Windows shown in inventory mode

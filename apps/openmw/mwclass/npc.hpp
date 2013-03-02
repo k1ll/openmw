@@ -3,11 +3,36 @@
 
 #include "../mwworld/class.hpp"
 
+namespace ESM
+{
+    class GameSetting;
+}
+
 namespace MWClass
 {
     class Npc : public MWWorld::Class
     {
             void ensureCustomData (const MWWorld::Ptr& ptr) const;
+
+            virtual MWWorld::Ptr
+            copyToCellImpl(const MWWorld::Ptr &ptr, MWWorld::CellStore &cell) const;
+
+            static const ESM::GameSetting *fMinWalkSpeed;
+            static const ESM::GameSetting *fMaxWalkSpeed;
+            static const ESM::GameSetting *fEncumberedMoveEffect;
+            static const ESM::GameSetting *fSneakSpeedMultiplier;
+            static const ESM::GameSetting *fAthleticsRunBonus;
+            static const ESM::GameSetting *fBaseRunMultiplier;
+            static const ESM::GameSetting *fMinFlySpeed;
+            static const ESM::GameSetting *fMaxFlySpeed;
+            static const ESM::GameSetting *fSwimRunBase;
+            static const ESM::GameSetting *fSwimRunAthleticsMult;
+            static const ESM::GameSetting *fJumpEncumbranceBase;
+            static const ESM::GameSetting *fJumpEncumbranceMultiplier;
+            static const ESM::GameSetting *fJumpAcrobaticsBase;
+            static const ESM::GameSetting *fJumpAcroMultiplier;
+            static const ESM::GameSetting *fJumpRunMultiplier;
+            static const ESM::GameSetting *fWereWolfRunMult;
 
         public:
 
@@ -61,6 +86,9 @@ namespace MWClass
             virtual float getSpeed (const MWWorld::Ptr& ptr) const;
             ///< Return movement speed.
 
+            virtual float getJump(const MWWorld::Ptr &ptr) const;
+            ///< Return jump velocity (not accounting for movement)
+
             virtual MWMechanics::Movement& getMovementSettings (const MWWorld::Ptr& ptr) const;
             ///< Return desired movement.
 
@@ -87,7 +115,17 @@ namespace MWClass
 
             virtual void adjustRotation(const MWWorld::Ptr& ptr,float& x,float& y,float& z) const;
 
+            virtual bool isEssential (const MWWorld::Ptr& ptr) const;
+            ///< Is \a ptr essential? (i.e. may losing \a ptr make the game unwinnable)
+            
             static void registerSelf();
+
+            virtual std::string getModel(const MWWorld::Ptr &ptr) const;
+
+            virtual bool
+            isActor() const {
+                return true;
+            }
     };
 }
 

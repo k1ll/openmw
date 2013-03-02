@@ -1,9 +1,9 @@
-#ifndef GAME_MMDIALOGUE_JOURNALENTRY_H
-#define GAME_MMDIALOGUE_JOURNALENTRY_H
+#ifndef GAME_MWDIALOGUE_JOURNALENTRY_H
+#define GAME_MWDIALOGUE_JOURNALENTRY_H
 
 #include <string>
 
-namespace ESMS
+namespace MWWorld 
 {
     struct ESMStore;
 }
@@ -20,7 +20,7 @@ namespace MWDialogue
 
         JournalEntry (const std::string& topic, const std::string& infoId);
 
-        std::string getText (const ESMS::ESMStore& store) const;
+        std::string getText (const MWWorld::ESMStore& store) const;
 
         static JournalEntry makeFromQuest (const std::string& topic, int index);
 

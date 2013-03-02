@@ -68,7 +68,7 @@ void validate(boost::any &v, std::vector<std::string> const &tokens, FallbackMap
 
         if((mapIt = map->mMap.find(key)) == map->mMap.end())
         {
-            map->mMap.insert(std::make_pair<std::string,std::string>(key,value));
+            map->mMap.insert(std::make_pair (key,value));
         }
     }
 }
@@ -124,11 +124,17 @@ bool parseOptions (int argc, char** argv, OMW::Engine& engine, Files::Configurat
         ("script-verbose", bpo::value<bool>()->implicit_value(true)
             ->default_value(false), "verbose script output")
 
-        ("new-game", bpo::value<bool>()->implicit_value(true)
-            ->default_value(false), "activate char gen/new game mechanics")
-
         ("script-all", bpo::value<bool>()->implicit_value(true)
             ->default_value(false), "compile all scripts (excluding dialogue scripts) at startup")
+
+        ("script-console", bpo::value<bool>()->implicit_value(true)
+            ->default_value(false), "enable console-only script functionality")
+
+        ("script-run", bpo::value<std::string>()->default_value(""),
+            "select a file containing a list of console commands that is executed on startup")
+
+        ("new-game", bpo::value<bool>()->implicit_value(true)
+            ->default_value(false), "activate char gen/new game mechanics")
 
         ("fs-strict", bpo::value<bool>()->implicit_value(true)
             ->default_value(false), "strict file system handling (no case folding)")
@@ -145,6 +151,8 @@ bool parseOptions (int argc, char** argv, OMW::Engine& engine, Files::Configurat
 
         ("fallback", bpo::value<FallbackMap>()->default_value(FallbackMap(), "")
             ->multitoken()->composing(), "fallback values")
+
+        ("activate-dist", bpo::value <int> ()->default_value (-1), "activation distance override");
 
         ;
 
@@ -178,21 +186,8 @@ bool parseOptions (int argc, char** argv, OMW::Engine& engine, Files::Configurat
 
     // Font encoding settings
     std::string encoding(variables["encoding"].as<std::string>());
-    if (encoding == "win1250")
-    {
-      std::cout << "Using Central and Eastern European font encoding." << std::endl;
-      engine.setEncoding(encoding);
-    }
-    else if (encoding == "win1251")
-    {
-      std::cout << "Using Cyrillic font encoding." << std::endl;
-      engine.setEncoding(encoding);
-    }
-    else
-    {
-      std::cout << "Using default (English) font encoding." << std::endl;
-      engine.setEncoding("win1252");
-    }
+    std::cout << ToUTF8::encodingUsingMessage(encoding) << std::endl;
+    engine.setEncoding(ToUTF8::calculateEncoding(encoding));
 
     // directory settings
     engine.enableFSStrict(variables["fs-strict"].as<bool>());
@@ -202,15 +197,7 @@ bool parseOptions (int argc, char** argv, OMW::Engine& engine, Files::Configurat
     std::string local(variables["data-local"].as<std::string>());
     if (!local.empty())
     {
-        std::cout << "Ignoring data-local (currently not supported)" << std::endl;
-//        dataDirs.push_back(Files::PathContainer::value_type(local));
-    }
-
-    if (dataDirs.size()>1)
-    {
-        dataDirs.resize (1);
-        std::cout << "Ignoring all but the first data path (multiple data paths currently not supported)"
-            << std::endl;
+        dataDirs.push_back(Files::PathContainer::value_type(local));
     }
 
     cfgMgr.processPaths(dataDirs);
@@ -227,18 +214,21 @@ bool parseOptions (int argc, char** argv, OMW::Engine& engine, Files::Configurat
         master.push_back("Morrowind");
     }
 
-    if (master.size() > 1)
-    {
-        std::cout
-            << "Ignoring all but the first master file (multiple master files not yet supported)."
-            << std::endl;
-    }
-    engine.addMaster(master[0]);
-
     StringsVector plugin = variables["plugin"].as<StringsVector>();
-    if (!plugin.empty())
+    // Removed check for 255 files, which would be the hard-coded limit in Morrowind.
+    //  I'll keep the following variable in, maybe we can use it for something different.
+    //  Say, a feedback like "loading file x/cnt".
+    // Commenting this out for now to silence compiler warning.
+    //int cnt = master.size() + plugin.size();
+
+    // Prepare loading master/plugin files (i.e. send filenames to engine)
+    for (std::vector<std::string>::size_type i = 0; i < master.size(); i++)
     {
-        std::cout << "Ignoring plugin files (plugins not yet supported)." << std::endl;
+        engine.addMaster(master[i]);
+    }
+    for (std::vector<std::string>::size_type i = 0; i < plugin.size(); i++)
+    {
+        engine.addPlugin(plugin[i]);
     }
 
     // startup-settings
@@ -253,6 +243,9 @@ bool parseOptions (int argc, char** argv, OMW::Engine& engine, Files::Configurat
     engine.setAnimationVerbose(variables["anim-verbose"].as<bool>());
     engine.setTabCompletionMode(variables["tab-completion"].as<int>());
     engine.setFallbackValues(variables["fallback"].as<FallbackMap>().mMap);
+    engine.setScriptConsoleMode (variables["script-console"].as<bool>());
+    engine.setStartupScript (variables["script-run"].as<std::string>());
+    engine.setActivationDistanceOverride (variables["activate-dist"].as<int>());
 
     return true;
 }

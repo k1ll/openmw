@@ -1,25 +1,3 @@
-/**
- *  Open Morrowind - an opensource Elder Scrolls III: Morrowind
- *  engine implementation.
- *
- *  Copyright (C) 2011 Open Morrowind Team
- *
- *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-
-/** \file components/files/linuxpath.cpp */
-
 #include "linuxpath.hpp"
 
 #if defined(__linux__) || defined(__FreeBSD__)
@@ -36,10 +14,14 @@
 namespace Files
 {
 
+LinuxPath::LinuxPath(const std::string& application_name)
+    : mName(application_name)
+{
+}
+
 boost::filesystem::path LinuxPath::getUserPath() const
 {
     boost::filesystem::path userPath(".");
-    boost::filesystem::path suffix("/");
 
     const char* theDir = getenv("HOME");
     if (theDir == NULL)
@@ -53,19 +35,38 @@ boost::filesystem::path LinuxPath::getUserPath() const
 
     if (theDir != NULL)
     {
-        suffix = boost::filesystem::path("/.config/");
         userPath = boost::filesystem::path(theDir);
     }
 
-    userPath /= suffix;
+    return userPath / ".config" / mName;
+}
 
-    return userPath;
+boost::filesystem::path LinuxPath::getCachePath() const
+{
+    boost::filesystem::path userPath(".");
+
+    const char* theDir = getenv("HOME");
+    if (theDir == NULL)
+    {
+        struct passwd* pwd = getpwuid(getuid());
+        if (pwd != NULL)
+        {
+            theDir = pwd->pw_dir;
+        }
+    }
+
+    if (theDir != NULL)
+    {
+        userPath = boost::filesystem::path(theDir);
+    }
+
+    return userPath / ".cache" / mName;
 }
 
 boost::filesystem::path LinuxPath::getGlobalPath() const
 {
     boost::filesystem::path globalPath("/etc/");
-    return globalPath;
+    return globalPath / mName;
 }
 
 boost::filesystem::path LinuxPath::getLocalPath() const
@@ -76,7 +77,7 @@ boost::filesystem::path LinuxPath::getLocalPath() const
 boost::filesystem::path LinuxPath::getGlobalDataPath() const
 {
     boost::filesystem::path globalDataPath("/usr/share/games/");
-    return globalDataPath;
+    return globalDataPath / mName;
 }
 
 boost::filesystem::path LinuxPath::getInstallPath() const

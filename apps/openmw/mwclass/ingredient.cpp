@@ -5,48 +5,61 @@
 
 #include "../mwbase/environment.hpp"
 #include "../mwbase/world.hpp"
+#include "../mwbase/windowmanager.hpp"
 
 #include "../mwworld/ptr.hpp"
 #include "../mwworld/actiontake.hpp"
 #include "../mwworld/cellstore.hpp"
 #include "../mwworld/physicssystem.hpp"
+#include "../mwworld/actioneat.hpp"
+#include "../mwworld/player.hpp"
+#include "../mwworld/nullaction.hpp"
 
-#include "../mwgui/window_manager.hpp"
+#include "../mwmechanics/npcstats.hpp"
+
 #include "../mwgui/tooltips.hpp"
 
 #include "../mwrender/objects.hpp"
 #include "../mwrender/renderinginterface.hpp"
 
-#include "../mwsound/soundmanager.hpp"
-
 namespace MWClass
 {
-    void Ingredient::insertObjectRendering (const MWWorld::Ptr& ptr, MWRender::RenderingInterface& renderingInterface) const
+    std::string Ingredient::getId (const MWWorld::Ptr& ptr) const
     {
         MWWorld::LiveCellRef<ESM::Ingredient> *ref =
             ptr.get<ESM::Ingredient>();
 
-        assert (ref->base != NULL);
-        const std::string &model = ref->base->model;
-
-        if (!model.empty())
-        {
+        return ref->mBase->mId;
+    }
+    
+    void Ingredient::insertObjectRendering (const MWWorld::Ptr& ptr, MWRender::RenderingInterface& renderingInterface) const
+    {
+        const std::string model = getModel(ptr);
+        if (!model.empty()) {
             MWRender::Objects& objects = renderingInterface.getObjects();
             objects.insertBegin(ptr, ptr.getRefData().isEnabled(), false);
-            objects.insertMesh(ptr, "meshes\\" + model);
+            objects.insertMesh(ptr, model);
         }
     }
 
     void Ingredient::insertObject(const MWWorld::Ptr& ptr, MWWorld::PhysicsSystem& physics) const
     {
+        const std::string model = getModel(ptr);
+        if(!model.empty())
+            physics.addObject(ptr);
+    }
+
+    std::string Ingredient::getModel(const MWWorld::Ptr &ptr) const
+    {
         MWWorld::LiveCellRef<ESM::Ingredient> *ref =
             ptr.get<ESM::Ingredient>();
+        assert(ref->mBase != NULL);
 
-        const std::string &model = ref->base->model;
-        assert (ref->base != NULL);
-        if(!model.empty()){
-            physics.insertObjectPhysics(ptr, "meshes\\" + model);
+        const std::string &model = ref->mBase->mModel;
+        if (!model.empty()) {
+            return "meshes\\" + model;
         }
+        return "";
     }
 
     std::string Ingredient::getName (const MWWorld::Ptr& ptr) const
@@ -54,16 +67,20 @@ namespace MWClass
         MWWorld::LiveCellRef<ESM::Ingredient> *ref =
             ptr.get<ESM::Ingredient>();
 
-        return ref->base->name;
+        return ref->mBase->mName;
     }
 
     boost::shared_ptr<MWWorld::Action> Ingredient::activate (const MWWorld::Ptr& ptr,
         const MWWorld::Ptr& actor) const
     {
-        MWBase::Environment::get().getSoundManager()->playSound3D (ptr, getUpSoundId(ptr), 1.0, 1.0, MWSound::Play_NoTrack);
+        if (!MWBase::Environment::get().getWindowManager()->isAllowed(MWGui::GW_Inventory))
+            return boost::shared_ptr<MWWorld::Action> (new MWWorld::NullAction ());
 
-        return boost::shared_ptr<MWWorld::Action> (
-            new MWWorld::ActionTake (ptr));
+        boost::shared_ptr<MWWorld::Action> action(new MWWorld::ActionTake (ptr));
+
+        action->setSound(getUpSoundId(ptr));
+
+        return action;
     }
 
     std::string Ingredient::getScript (const MWWorld::Ptr& ptr) const
@@ -71,7 +88,7 @@ namespace MWClass
         MWWorld::LiveCellRef<ESM::Ingredient> *ref =
             ptr.get<ESM::Ingredient>();
 
-        return ref->base->script;
+        return ref->mBase->mScript;
     }
 
     int Ingredient::getValue (const MWWorld::Ptr& ptr) const
@@ -79,9 +96,19 @@ namespace MWClass
         MWWorld::LiveCellRef<ESM::Ingredient> *ref =
             ptr.get<ESM::Ingredient>();
 
-        return ref->base->data.value;
+        return ref->mBase->mData.mValue;
     }
 
+   
+    boost::shared_ptr<MWWorld::Action> Ingredient::use (const MWWorld::Ptr& ptr) const
+    {
+        boost::shared_ptr<MWWorld::Action> action (new MWWorld::ActionEat (ptr));
+
+        action->setSound ("Swallow");
+
+        return action;    
+    }
+    
     void Ingredient::registerSelf()
     {
         boost::shared_ptr<Class> instance (new Ingredient);
@@ -104,7 +131,7 @@ namespace MWClass
           MWWorld::LiveCellRef<ESM::Ingredient> *ref =
             ptr.get<ESM::Ingredient>();
 
-        return ref->base->icon;
+        return ref->mBase->mIcon;
     }
 
     bool Ingredient::hasToolTip (const MWWorld::Ptr& ptr) const
@@ -112,7 +139,7 @@ namespace MWClass
         MWWorld::LiveCellRef<ESM::Ingredient> *ref =
             ptr.get<ESM::Ingredient>();
 
-        return (ref->base->name != "");
+        return (ref->mBase->mName != "");
     }
 
     MWGui::ToolTipInfo Ingredient::getToolTipInfo (const MWWorld::Ptr& ptr) const
@@ -121,30 +148,38 @@ namespace MWClass
             ptr.get<ESM::Ingredient>();
 
         MWGui::ToolTipInfo info;
-        info.caption = ref->base->name + MWGui::ToolTips::getCountString(ptr.getRefData().getCount());
-        info.icon = ref->base->icon;
-
-        const ESMS::ESMStore& store = MWBase::Environment::get().getWorld()->getStore();
+        info.caption = ref->mBase->mName + MWGui::ToolTips::getCountString(ptr.getRefData().getCount());
+        info.icon = ref->mBase->mIcon;
 
         std::string text;
 
-        text += "\n" + store.gameSettings.search("sWeight")->str + ": " + MWGui::ToolTips::toString(ref->base->data.weight);
-        text += MWGui::ToolTips::getValueString(ref->base->data.value, store.gameSettings.search("sValue")->str);
+        text += "\n#{sWeight}: " + MWGui::ToolTips::toString(ref->mBase->mData.mWeight);
+        text += MWGui::ToolTips::getValueString(ref->mBase->mData.mValue, "#{sValue}");
 
         if (MWBase::Environment::get().getWindowManager()->getFullHelp()) {
-            text += MWGui::ToolTips::getMiscString(ref->ref.owner, "Owner");
-            text += MWGui::ToolTips::getMiscString(ref->base->script, "Script");
+            text += MWGui::ToolTips::getMiscString(ref->mRef.mOwner, "Owner");
+            text += MWGui::ToolTips::getMiscString(ref->mBase->mScript, "Script");
         }
+
+        MWWorld::Ptr player = MWBase::Environment::get().getWorld ()->getPlayer ().getPlayer();
+        MWMechanics::NpcStats& npcStats = MWWorld::Class::get(player).getNpcStats (player);
+        int alchemySkill = npcStats.getSkill (ESM::Skill::Alchemy).getBase();
 
         MWGui::Widgets::SpellEffectList list;
         for (int i=0; i<4; ++i)
         {
-            if (ref->base->data.effectID[i] < 0)
+            if (ref->mBase->mData.mEffectID[i] < 0)
                 continue;
             MWGui::Widgets::SpellEffectParams params;
-            params.mEffectID = ref->base->data.effectID[i];
-            params.mAttribute = ref->base->data.attributes[i];
-            params.mSkill = ref->base->data.skills[i];
+            params.mEffectID = ref->mBase->mData.mEffectID[i];
+            params.mAttribute = ref->mBase->mData.mAttributes[i];
+            params.mSkill = ref->mBase->mData.mSkills[i];
+
+            params.mKnown = ( (i == 0 && alchemySkill >= 15)
+                 || (i == 1 && alchemySkill >= 30)
+                 || (i == 2 && alchemySkill >= 45)
+                 || (i == 3 && alchemySkill >= 60));
+
             list.push_back(params);
         }
         info.effects = list;
@@ -152,5 +187,14 @@ namespace MWClass
         info.text = text;
 
         return info;
+    }
+
+    MWWorld::Ptr
+    Ingredient::copyToCellImpl(const MWWorld::Ptr &ptr, MWWorld::CellStore &cell) const
+    {
+        MWWorld::LiveCellRef<ESM::Ingredient> *ref =
+            ptr.get<ESM::Ingredient>();
+
+        return MWWorld::Ptr(&cell.mIngreds.insert(*ref), &cell);
     }
 }

@@ -5,16 +5,14 @@
 
 #include <boost/algorithm/string.hpp>
 
-#include <components/esm_store/store.hpp>
-
 #include "../mwbase/environment.hpp"
 #include "../mwbase/world.hpp"
+#include "../mwbase/soundmanager.hpp"
 
 #include "../mwrender/renderingmanager.hpp"
 
-#include "../mwsound/soundmanager.hpp"
-
 #include "player.hpp"
+#include "esmstore.hpp"
 
 using namespace Ogre;
 using namespace MWWorld;
@@ -42,7 +40,8 @@ const float WeatherGlobals::mThunderSoundDelay = 0.25;
 WeatherManager::WeatherManager(MWRender::RenderingManager* rendering) :
      mHour(14), mCurrentWeather("clear"), mFirstUpdate(true), mWeatherUpdateTime(0),
      mThunderFlash(0), mThunderChance(0), mThunderChanceNeeded(50), mThunderSoundDelay(0),
-     mRemainingTransitionTime(0), mMonth(0), mDay(0)
+     mRemainingTransitionTime(0), mMonth(0), mDay(0),
+     mTimePassed(0)
 {
     mRendering = rendering;
 
@@ -476,8 +475,7 @@ WeatherResult WeatherManager::transition(float factor)
     result.mSunDiscColor = lerp(current.mSunDiscColor, other.mSunDiscColor);
     result.mFogDepth = lerp(current.mFogDepth, other.mFogDepth);
     result.mWindSpeed = lerp(current.mWindSpeed, other.mWindSpeed);
-    //result.mCloudSpeed = lerp(current.mCloudSpeed, other.mCloudSpeed);
-    result.mCloudSpeed = current.mCloudSpeed;
+    result.mCloudSpeed = lerp(current.mCloudSpeed, other.mCloudSpeed);
     result.mCloudOpacity = lerp(current.mCloudOpacity, other.mCloudOpacity);
     result.mGlareView = lerp(current.mGlareView, other.mGlareView);
     result.mNightFade = lerp(current.mNightFade, other.mNightFade);
@@ -489,14 +487,17 @@ WeatherResult WeatherManager::transition(float factor)
 
 void WeatherManager::update(float duration)
 {
-    mWeatherUpdateTime -= duration * MWBase::Environment::get().getWorld()->getTimeScaleFactor();
+    float timePassed = mTimePassed;
+    mTimePassed = 0;
+
+    mWeatherUpdateTime -= timePassed;
 
     bool exterior = (MWBase::Environment::get().getWorld()->isCellExterior() || MWBase::Environment::get().getWorld()->isCellQuasiExterior());
 
     if (exterior)
     {
-        std::string regionstr = MWBase::Environment::get().getWorld()->getPlayer().getPlayer().getCell()->cell->region;
-        boost::algorithm::to_lower(regionstr);
+        std::string regionstr = MWBase::Environment::get().getWorld()->getPlayer().getPlayer().getCell()->mCell->mRegion;
+        Misc::StringUtils::toLower(regionstr);
 
         if (mWeatherUpdateTime <= 0 || regionstr != mCurrentRegion)
         {
@@ -510,20 +511,21 @@ void WeatherManager::update(float duration)
             else
             {
                 // get weather probabilities for the current region
-                const ESM::Region *region = MWBase::Environment::get().getWorld()->getStore().regions.search (regionstr);
+                const ESM::Region *region =
+                    MWBase::Environment::get().getWorld()->getStore().get<ESM::Region>().search (regionstr);
 
                 if (region != 0)
                 {
-                    float clear = region->data.clear/255.f;
-                    float cloudy = region->data.cloudy/255.f;
-                    float foggy = region->data.foggy/255.f;
-                    float overcast = region->data.overcast/255.f;
-                    float rain = region->data.rain/255.f;
-                    float thunder = region->data.thunder/255.f;
-                    float ash = region->data.ash/255.f;
-                    float blight = region->data.blight/255.f;
-                    //float snow = region->data.a/255.f;
-                    //float blizzard = region->data.b/255.f;
+                    float clear = region->mData.mClear/255.f;
+                    float cloudy = region->mData.mCloudy/255.f;
+                    float foggy = region->mData.mFoggy/255.f;
+                    float overcast = region->mData.mOvercast/255.f;
+                    float rain = region->mData.mRain/255.f;
+                    float thunder = region->mData.mThunder/255.f;
+                    float ash = region->mData.mAsh/255.f;
+                    float blight = region->mData.mBlight/255.f;
+                    //float snow = region->mData.a/255.f;
+                    //float blizzard = region->mData.b/255.f;
 
                     // re-scale to 100 percent
                     const float total = clear+cloudy+foggy+overcast+rain+thunder+ash+blight;//+snow+blizzard;
@@ -560,7 +562,7 @@ void WeatherManager::update(float duration)
 
         if (mNextWeather != "")
         {
-            mRemainingTransitionTime -= duration * MWBase::Environment::get().getWorld()->getTimeScaleFactor();
+            mRemainingTransitionTime -= timePassed;
             if (mRemainingTransitionTime < 0)
             {
                 mCurrentWeather = mNextWeather;
@@ -689,13 +691,13 @@ void WeatherManager::update(float duration)
 
                 mThunderFlash -= duration;
                 if (mThunderFlash > 0)
-                    mRendering->getSkyManager()->setThunder( mThunderFlash / WeatherGlobals::mThunderThreshold );
+                    mRendering->getSkyManager()->setLightningStrength( mThunderFlash / WeatherGlobals::mThunderThreshold );
                 else
                 {
                     srand(time(NULL));
                     mThunderChanceNeeded = rand() % 100;
                     mThunderChance = 0;
-                    mRendering->getSkyManager()->setThunder( 0.f );
+                    mRendering->getSkyManager()->setLightningStrength( 0.f );
                 }
             }
             else
@@ -706,14 +708,14 @@ void WeatherManager::update(float duration)
                 {
                     mThunderFlash = WeatherGlobals::mThunderThreshold;
 
-                    mRendering->getSkyManager()->setThunder( mThunderFlash / WeatherGlobals::mThunderThreshold );
+                    mRendering->getSkyManager()->setLightningStrength( mThunderFlash / WeatherGlobals::mThunderThreshold );
 
                     mThunderSoundDelay = WeatherGlobals::mThunderSoundDelay;
                 }
             }
         }
         else
-            mRendering->getSkyManager()->setThunder(0.f);
+            mRendering->getSkyManager()->setLightningStrength(0.f);
 
         mRendering->setAmbientColour(result.mAmbientColor);
         mRendering->sunEnable();
@@ -725,7 +727,7 @@ void WeatherManager::update(float duration)
     {
         mRendering->sunDisable();
         mRendering->skyDisable();
-        mRendering->getSkyManager()->setThunder(0.f);
+        mRendering->getSkyManager()->setLightningStrength(0.f);
     }
 
     // play sounds
@@ -736,7 +738,7 @@ void WeatherManager::update(float duration)
         if (std::find(mSoundsPlaying.begin(), mSoundsPlaying.end(), ambientSnd) == mSoundsPlaying.end())
         {
             mSoundsPlaying.push_back(ambientSnd);
-            MWBase::Environment::get().getSoundManager()->playSound(ambientSnd, 1.0, 1.0, true);
+            MWBase::Environment::get().getSoundManager()->playSound(ambientSnd, 1.0, 1.0, MWBase::SoundManager::Play_Loop);
         }
     }
 
@@ -747,7 +749,7 @@ void WeatherManager::update(float duration)
         if (std::find(mSoundsPlaying.begin(), mSoundsPlaying.end(), rainSnd) == mSoundsPlaying.end())
         {
             mSoundsPlaying.push_back(rainSnd);
-            MWBase::Environment::get().getSoundManager()->playSound(rainSnd, 1.0, 1.0, true);
+            MWBase::Environment::get().getSoundManager()->playSound(rainSnd, 1.0, 1.0, MWBase::SoundManager::Play_Loop);
         }
     }
 

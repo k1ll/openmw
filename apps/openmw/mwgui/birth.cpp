@@ -1,16 +1,31 @@
 #include "birth.hpp"
-#include "window_manager.hpp"
-#include "widgets.hpp"
-#include "components/esm_store/store.hpp"
 
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
 
+#include "../mwworld/esmstore.hpp"
+
+#include "../mwbase/environment.hpp"
+#include "../mwbase/world.hpp"
+#include "../mwbase/windowmanager.hpp"
+
+#include "widgets.hpp"
+
 using namespace MWGui;
 using namespace Widgets;
 
-BirthDialog::BirthDialog(WindowManager& parWindowManager)
-  : WindowBase("openmw_chargen_birth.layout", parWindowManager)
+namespace
+{
+
+bool sortBirthSigns(const std::pair<std::string, const ESM::BirthSign*>& left, const std::pair<std::string, const ESM::BirthSign*>& right)
+{
+    return left.second->mName.compare (right.second->mName) < 0;
+}
+
+}
+
+BirthDialog::BirthDialog(MWBase::WindowManager& parWindowManager)
+  : WindowModal("openmw_chargen_birth.layout", parWindowManager)
 {
     // Centre dialog
     center();
@@ -40,9 +55,6 @@ BirthDialog::BirthDialog(WindowManager& parWindowManager)
 
 void BirthDialog::setNextButtonShow(bool shown)
 {
-    MyGUI::ButtonPtr backButton;
-    getWidget(backButton, "BackButton");
-
     MyGUI::ButtonPtr okButton;
     getWidget(okButton, "OKButton");
 
@@ -50,19 +62,13 @@ void BirthDialog::setNextButtonShow(bool shown)
         okButton->setCaption(mWindowManager.getGameSettingString("sNext", ""));
     else
         okButton->setCaption(mWindowManager.getGameSettingString("sOK", ""));
-
-    int okButtonWidth = okButton->getTextSize().width + 24;
-    int backButtonWidth = backButton->getTextSize().width + 24;
-
-    okButton->setCoord(473 - okButtonWidth, 340, okButtonWidth, 23);
-    backButton->setCoord(473 - okButtonWidth - backButtonWidth - 6, 340, backButtonWidth, 23);
 }
 
 void BirthDialog::open()
 {
+    WindowModal::open();
     updateBirths();
     updateSpells();
-    setVisible(true);
 }
 
 
@@ -76,6 +82,8 @@ void BirthDialog::setBirthId(const std::string &birthId)
         if (boost::iequals(*mBirthList->getItemDataAt<std::string>(i), birthId))
         {
             mBirthList->setIndexSelected(i);
+            MyGUI::ButtonPtr okButton;
+            getWidget(okButton, "OKButton");
             break;
         }
     }
@@ -87,6 +95,8 @@ void BirthDialog::setBirthId(const std::string &birthId)
 
 void BirthDialog::onOkClicked(MyGUI::Widget* _sender)
 {
+    if(mBirthList->getIndexSelected() == MyGUI::ITEM_NONE)
+        return;
     eventDone(this);
 }
 
@@ -99,6 +109,9 @@ void BirthDialog::onSelectBirth(MyGUI::ListBox* _sender, size_t _index)
 {
     if (_index == MyGUI::ITEM_NONE)
         return;
+
+    MyGUI::ButtonPtr okButton;
+    getWidget(okButton, "OKButton");
 
     const std::string *birthId = mBirthList->getItemDataAt<std::string>(_index);
     if (boost::iequals(mCurrentBirthId, *birthId))
@@ -114,18 +127,33 @@ void BirthDialog::updateBirths()
 {
     mBirthList->removeAllItems();
 
-    const ESMS::ESMStore &store = mWindowManager.getStore();
+    const MWWorld::Store<ESM::BirthSign> &signs =
+        MWBase::Environment::get().getWorld()->getStore().get<ESM::BirthSign>();
 
-    ESMS::RecListT<ESM::BirthSign>::MapType::const_iterator it = store.birthSigns.list.begin();
-    ESMS::RecListT<ESM::BirthSign>::MapType::const_iterator end = store.birthSigns.list.end();
-    int index = 0;
-    for (; it != end; ++it)
+    // sort by name
+    std::vector < std::pair<std::string, const ESM::BirthSign*> > birthSigns;
+
+    MWWorld::Store<ESM::BirthSign>::iterator it = signs.begin();
+    for (; it != signs.end(); ++it)
     {
-        const ESM::BirthSign &birth = it->second;
-        mBirthList->addItem(birth.name, it->first);
-        if (boost::iequals(it->first, mCurrentBirthId))
+        birthSigns.push_back(std::make_pair(it->mId, &(*it)));
+    }
+    std::sort(birthSigns.begin(), birthSigns.end(), sortBirthSigns);
+
+    int index = 0;
+    for (std::vector<std::pair<std::string, const ESM::BirthSign*> >::const_iterator it2 = birthSigns.begin();
+         it2 != birthSigns.end(); ++it2, ++index)
+    {
+        mBirthList->addItem(it2->second->mName, it2->first);
+        if (mCurrentBirthId.empty())
+        {
             mBirthList->setIndexSelected(index);
-        ++index;
+            mCurrentBirthId = it2->first;
+        }
+        else if (boost::iequals(it2->first, mCurrentBirthId))
+        {
+            mBirthList->setIndexSelected(index);
+        }
     }
 }
 
@@ -144,24 +172,27 @@ void BirthDialog::updateSpells()
     const int lineHeight = 18;
     MyGUI::IntCoord coord(0, 0, mSpellArea->getWidth(), 18);
 
-    const ESMS::ESMStore &store = mWindowManager.getStore();
-    const ESM::BirthSign *birth = store.birthSigns.find(mCurrentBirthId);
+    const MWWorld::ESMStore &store =
+        MWBase::Environment::get().getWorld()->getStore();
 
-    std::string texturePath = std::string("textures\\") + birth->texture;
+    const ESM::BirthSign *birth =
+        store.get<ESM::BirthSign>().find(mCurrentBirthId);
+
+    std::string texturePath = std::string("textures\\") + birth->mTexture;
     fixTexturePath(texturePath);
     mBirthImage->setImageTexture(texturePath);
 
     std::vector<std::string> abilities, powers, spells;
 
-    std::vector<std::string>::const_iterator it = birth->powers.list.begin();
-    std::vector<std::string>::const_iterator end = birth->powers.list.end();
+    std::vector<std::string>::const_iterator it = birth->mPowers.mList.begin();
+    std::vector<std::string>::const_iterator end = birth->mPowers.mList.end();
     for (; it != end; ++it)
     {
         const std::string &spellId = *it;
-        const ESM::Spell *spell = store.spells.search(spellId);
+        const ESM::Spell *spell = store.get<ESM::Spell>().search(spellId);
         if (!spell)
             continue; // Skip spells which cannot be found
-        ESM::Spell::SpellType type = static_cast<ESM::Spell::SpellType>(spell->data.type);
+        ESM::Spell::SpellType type = static_cast<ESM::Spell::SpellType>(spell->mData.mType);
         if (type != ESM::Spell::ST_Spell && type != ESM::Spell::ST_Ability && type != ESM::Spell::ST_Power)
             continue; // We only want spell, ability and powers.
 
@@ -174,11 +205,17 @@ void BirthDialog::updateSpells()
     }
 
     int i = 0;
-    struct{ const std::vector<std::string> &spells; const char *label; } categories[3] = {
+
+    struct {
+        const std::vector<std::string> &spells;
+        const char *label;
+    }
+    categories[3] = {
         {abilities, "sBirthsignmenu1"},
         {powers,    "sPowers"},
         {spells,    "sBirthsignmenu2"}
     };
+
     for (int category = 0; category < 3; ++category)
     {
         if (!categories[category].spells.empty())

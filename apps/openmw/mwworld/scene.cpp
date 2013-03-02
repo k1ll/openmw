@@ -1,18 +1,18 @@
 #include "scene.hpp"
 
+#include <components/nif/nif_file.hpp>
+
 #include "../mwbase/environment.hpp"
 #include "../mwbase/world.hpp" /// FIXME
+#include "../mwbase/soundmanager.hpp"
+#include "../mwbase/mechanicsmanager.hpp"
+#include "../mwbase/windowmanager.hpp"
 
-#include "../mwmechanics/mechanicsmanager.hpp"
-
-#include "../mwsound/soundmanager.hpp"
-
-#include "../mwgui/window_manager.hpp"
-
-#include "../mwworld/manualref.hpp" /// FIXME
-
+#include "physicssystem.hpp"
 #include "player.hpp"
 #include "localscripts.hpp"
+#include "esmstore.hpp"
+#include "class.hpp"
 
 #include "cellfunctors.hpp"
 
@@ -23,14 +23,16 @@ namespace
     void insertCellRefList(MWRender::RenderingManager& rendering,
         T& cellRefList, MWWorld::CellStore &cell, MWWorld::PhysicsSystem& physics)
     {
-        if (!cellRefList.list.empty())
+        if (!cellRefList.mList.empty())
         {
             const MWWorld::Class& class_ =
-                MWWorld::Class::get (MWWorld::Ptr (&*cellRefList.list.begin(), &cell));
-
-            for (typename T::List::iterator it = cellRefList.list.begin();
-                it != cellRefList.list.end(); it++)
+                MWWorld::Class::get (MWWorld::Ptr (&*cellRefList.mList.begin(), &cell));
+            int current = 0;
+            for (typename T::List::iterator it = cellRefList.mList.begin();
+                it != cellRefList.mList.end(); it++)
             {
+                ++current;
+
                 if (it->mData.getCount() || it->mData.isEnabled())
                 {
                     MWWorld::Ptr ptr (&*it, &cell);
@@ -39,6 +41,8 @@ namespace
                     {
                         rendering.addObject(ptr);
                         class_.insertObject(ptr, physics);
+                        MWBase::Environment::get().getWorld()->rotateObject(ptr, 0, 0, 0, true);
+                        MWBase::Environment::get().getWorld()->scaleObject(ptr, ptr.getCellRef().mScale);
                     }
                     catch (const std::exception& e)
                     {
@@ -56,25 +60,17 @@ namespace
 namespace MWWorld
 {
 
-    void Scene::update (float duration){
-        mRendering.update (duration);
+    void Scene::update (float duration, bool paused){
+        mRendering.update (duration, paused);
     }
 
     void Scene::unloadCell (CellStoreCollection::iterator iter)
     {
         std::cout << "Unloading cell\n";
         ListHandles functor;
-
-
-
-
-
-
+	
         (*iter)->forEach<ListHandles>(functor);
-
         {
-
-
             // silence annoying g++ warning
             for (std::vector<Ogre::SceneNode*>::const_iterator iter2 (functor.mHandles.begin());
                 iter2!=functor.mHandles.end(); ++iter2){
@@ -82,35 +78,32 @@ namespace MWWorld
                 mPhysics->removeObject (node->getName());
             }
 
-            if (!((*iter)->cell->data.flags & ESM::Cell::Interior))
+            if ((*iter)->mCell->isExterior())
             {
-                ESM::Land* land = MWBase::Environment::get().getWorld()->getStore().lands.search((*iter)->cell->data.gridX,(*iter)->cell->data.gridY);
+                ESM::Land* land =
+                    MWBase::Environment::get().getWorld()->getStore().get<ESM::Land>().search(
+                        (*iter)->mCell->getGridX(),
+                        (*iter)->mCell->getGridY()
+                    );
                 if (land)
-                    mPhysics->removeHeightField( (*iter)->cell->data.gridX, (*iter)->cell->data.gridY );
+                    mPhysics->removeHeightField( (*iter)->mCell->getGridX(), (*iter)->mCell->getGridY() );
             }
         }
 
-		mRendering.removeCell(*iter);
-		//mPhysics->removeObject("Unnamed_43");
+        mRendering.removeCell(*iter);
+       //mPhysics->removeObject("Unnamed_43");
 
         MWBase::Environment::get().getWorld()->getLocalScripts().clearCell (*iter);
-        MWBase::Environment::get().getMechanicsManager()->dropActors (*iter);
+        MWBase::Environment::get().getMechanicsManager()->drop (*iter);
         MWBase::Environment::get().getSoundManager()->stopSound (*iter);
-		mActiveCells.erase(*iter);
-
-
-
+        mActiveCells.erase(*iter);
     }
 
     void Scene::loadCell (Ptr::CellStore *cell)
     {
         // register local scripts
         MWBase::Environment::get().getWorld()->getLocalScripts().addCell (cell);
-
-
-
-        std::pair<CellStoreCollection::iterator, bool> result =
-            mActiveCells.insert(cell);
+        std::pair<CellStoreCollection::iterator, bool> result = mActiveCells.insert(cell);
 
         if(result.second)
         {
@@ -120,68 +113,114 @@ namespace MWWorld
             float verts = ESM::Land::LAND_SIZE;
             float worldsize = ESM::Land::REAL_SIZE;
 
-            if (!(cell->cell->data.flags & ESM::Cell::Interior))
+            if (cell->mCell->isExterior())
             {
-                ESM::Land* land = MWBase::Environment::get().getWorld()->getStore().lands.search(cell->cell->data.gridX,cell->cell->data.gridY);
-                if (land)
-                    mPhysics->addHeightField (land->landData->heights,
-                        cell->cell->data.gridX, cell->cell->data.gridY,
-                        0, ( worldsize/(verts-1) ), verts);
+                ESM::Land* land =
+                    MWBase::Environment::get().getWorld()->getStore().get<ESM::Land>().search(
+                        cell->mCell->getGridX(),
+                        cell->mCell->getGridY()
+                    );
+                if (land) {
+                    mPhysics->addHeightField (
+                        land->mLandData->mHeights,
+                        cell->mCell->getGridX(),
+                        cell->mCell->getGridY(),
+                        0,
+                        worldsize / (verts-1),
+                        verts)
+                    ;
+                }
             }
 
             mRendering.configureAmbient(*cell);
             mRendering.requestMap(cell);
             mRendering.configureAmbient(*cell);
-
         }
-
     }
 
-    void Scene::playerCellChange (Ptr::CellStore *cell, const ESM::Position& position,
-        bool adjustPlayerPos)
+    void Scene::playerCellChange(MWWorld::CellStore *cell, const ESM::Position& pos, bool adjustPlayerPos)
     {
-        bool hasWater = cell->cell->data.flags & cell->cell->HasWater;
-        mPhysics->setCurrentWater(hasWater, cell->cell->water);
-        if (adjustPlayerPos)
-        {
-            MWBase::Environment::get().getWorld()->getPlayer().setPos (position.pos[0], position.pos[1], position.pos[2]);
-            MWBase::Environment::get().getWorld()->getPlayer().setRot (position.rot[0], position.rot[1], position.rot[2]);
+        bool hasWater = cell->mCell->mData.mFlags & ESM::Cell::HasWater;
+        mPhysics->setCurrentWater(hasWater, cell->mCell->mWater);
+
+        MWBase::World *world = MWBase::Environment::get().getWorld();
+        world->getPlayer().setCell(cell);
+
+        MWWorld::Ptr player = world->getPlayer().getPlayer();
+
+        if (adjustPlayerPos) {
+            world->moveObject(player, pos.pos[0], pos.pos[1], pos.pos[2]);
+
+            float x = Ogre::Radian(pos.rot[0]).valueDegrees();
+            float y = Ogre::Radian(pos.rot[1]).valueDegrees();
+            float z = Ogre::Radian(pos.rot[2]).valueDegrees();
+            world->rotateObject(player, x, y, z);
         }
 
-        MWBase::Environment::get().getWorld()->getPlayer().setCell (cell);
+        MWBase::MechanicsManager *mechMgr =
+            MWBase::Environment::get().getMechanicsManager();
 
-        MWBase::Environment::get().getMechanicsManager()->addActor (MWBase::Environment::get().getWorld()->getPlayer().getPlayer());
-        MWBase::Environment::get().getMechanicsManager()->watchActor (MWBase::Environment::get().getWorld()->getPlayer().getPlayer());
+        mechMgr->add(player);
+        mechMgr->watchActor(player);
 
-        MWBase::Environment::get().getWindowManager()->changeCell( mCurrentCell );
+        MWBase::Environment::get().getWindowManager()->changeCell(mCurrentCell);
     }
 
     void Scene::changeCell (int X, int Y, const ESM::Position& position, bool adjustPlayerPos)
     {
+        Nif::NIFFile::CacheLock cachelock;
+        const MWWorld::Store<ESM::GameSetting> &gmst =
+            MWBase::Environment::get().getWorld()->getStore().get<ESM::GameSetting>();
+
         mRendering.preCellChange(mCurrentCell);
 
         // remove active
-        MWBase::Environment::get().getMechanicsManager()->removeActor (MWBase::Environment::get().getWorld()->getPlayer().getPlayer());
+        MWBase::Environment::get().getMechanicsManager()->remove(MWBase::Environment::get().getWorld()->getPlayer().getPlayer());
+
+        std::string loadingExteriorText;
+
+        loadingExteriorText = gmst.find ("sLoadingMessage3")->getString();
 
         CellStoreCollection::iterator active = mActiveCells.begin();
 
+        // get the number of cells to unload
+        int numUnload = 0;
         while (active!=mActiveCells.end())
         {
-            if (!((*active)->cell->data.flags & ESM::Cell::Interior))
+            if ((*active)->mCell->isExterior())
             {
-                if (std::abs (X-(*active)->cell->data.gridX)<=1 &&
-                    std::abs (Y-(*active)->cell->data.gridY)<=1)
+                if (std::abs (X-(*active)->mCell->getGridX())<=1 &&
+                    std::abs (Y-(*active)->mCell->getGridY())<=1)
                 {
                     // keep cells within the new 3x3 grid
                     ++active;
                     continue;
                 }
             }
-
-            unloadCell (active++);
+            ++active;
+            ++numUnload;
         }
 
-        // Load cells
+        int current = 0;
+        active = mActiveCells.begin();
+        while (active!=mActiveCells.end())
+        {
+            if ((*active)->mCell->isExterior())
+            {
+                if (std::abs (X-(*active)->mCell->getGridX())<=1 &&
+                    std::abs (Y-(*active)->mCell->getGridY())<=1)
+                {
+                    // keep cells within the new 3x3 grid
+                    ++active;
+                    continue;
+                }
+            }
+            unloadCell (active++);
+            ++current;
+        }
+
+        int numLoad = 0;
+        // get the number of cells to load
         for (int x=X-1; x<=X+1; ++x)
             for (int y=Y-1; y<=Y+1; ++y)
             {
@@ -189,10 +228,32 @@ namespace MWWorld
 
                 while (iter!=mActiveCells.end())
                 {
-                    assert (!((*iter)->cell->data.flags & ESM::Cell::Interior));
+                    assert ((*iter)->mCell->isExterior());
 
-                    if (x==(*iter)->cell->data.gridX &&
-                        y==(*iter)->cell->data.gridY)
+                    if (x==(*iter)->mCell->getGridX() &&
+                        y==(*iter)->mCell->getGridY())
+                        break;
+
+                    ++iter;
+                }
+
+                if (iter==mActiveCells.end())
+                    ++numLoad;
+            }
+
+        // Load cells
+        current = 0;
+        for (int x=X-1; x<=X+1; ++x)
+            for (int y=Y-1; y<=Y+1; ++y)
+            {
+                CellStoreCollection::iterator iter = mActiveCells.begin();
+
+                while (iter!=mActiveCells.end())
+                {
+                    assert ((*iter)->mCell->isExterior());
+
+                    if (x==(*iter)->mCell->getGridX() &&
+                        y==(*iter)->mCell->getGridY())
                         break;
 
                     ++iter;
@@ -202,7 +263,11 @@ namespace MWWorld
                 {
                     CellStore *cell = MWBase::Environment::get().getWorld()->getExterior(x, y);
 
+                    //Loading Exterior loading text
+                    MWBase::Environment::get().getWindowManager ()->setLoadingProgress (loadingExteriorText, 0, current, numLoad);
+
                     loadCell (cell);
+                    ++current;
                 }
             }
 
@@ -211,10 +276,10 @@ namespace MWWorld
 
         while (iter!=mActiveCells.end())
         {
-            assert (!((*iter)->cell->data.flags & ESM::Cell::Interior));
+            assert ((*iter)->mCell->isExterior());
 
-            if (X==(*iter)->cell->data.gridX &&
-                Y==(*iter)->cell->data.gridY)
+            if (X==(*iter)->mCell->getGridX() &&
+                Y==(*iter)->mCell->getGridY())
                 break;
 
             ++iter;
@@ -224,9 +289,8 @@ namespace MWWorld
 
         mCurrentCell = *iter;
 
-
         // adjust player
-        playerCellChange (MWBase::Environment::get().getWorld()->getExterior(X, Y), position, adjustPlayerPos);
+        playerCellChange (mCurrentCell, position, adjustPlayerPos);
 
         // Sky system
         MWBase::Environment::get().getWorld()->adjustSky();
@@ -234,6 +298,8 @@ namespace MWWorld
         mRendering.switchToExterior();
 
         mCellChanged = true;
+
+        MWBase::Environment::get().getWindowManager ()->loadingDone ();
     }
 
     //We need the ogre renderer and a scene node.
@@ -258,35 +324,75 @@ namespace MWWorld
 
     void Scene::changeToInteriorCell (const std::string& cellName, const ESM::Position& position)
     {
-        std::cout << "Changing to interior\n";
+
+        const MWWorld::Store<ESM::GameSetting> &gmst =
+            MWBase::Environment::get().getWorld()->getStore().get<ESM::GameSetting>();
+
+        std::string loadingInteriorText;
+        loadingInteriorText = gmst.find ("sLoadingMessage2")->getString();
 
         CellStore *cell = MWBase::Environment::get().getWorld()->getInterior(cellName);
+        bool loadcell = (mCurrentCell == NULL);
+        if(!loadcell)
+            loadcell = *mCurrentCell != *cell;
+        
+        if(!loadcell)
+        {
+            MWBase::World *world = MWBase::Environment::get().getWorld();
+            world->moveObject(world->getPlayer().getPlayer(), position.pos[0], position.pos[1], position.pos[2]);
+
+            float x = Ogre::Radian(position.rot[0]).valueDegrees();
+            float y = Ogre::Radian(position.rot[1]).valueDegrees();
+            float z = Ogre::Radian(position.rot[2]).valueDegrees();
+            world->rotateObject(world->getPlayer().getPlayer(), x, y, z);
+            return;
+        }
+        
+        std::cout << "Changing to interior\n";
 
         // remove active
         CellStoreCollection::iterator active = mActiveCells.begin();
 
+        // count number of cells to unload
+        int numUnload = 0;
+        while (active!=mActiveCells.end())
+        {
+            ++active;
+            ++numUnload;
+        }
+
+        // unload
+        int current = 0;
+        active = mActiveCells.begin();
         while (active!=mActiveCells.end())
         {
             unloadCell (active++);
+            ++current;
         }
 
         // Load cell.
-        std::cout << "cellName:" << cellName << std::endl;
+        std::cout << "cellName: " << cell->mCell->mName << std::endl;
+
+        //Loading Interior loading text
+        MWBase::Environment::get().getWindowManager ()->setLoadingProgress (loadingInteriorText, 0, 0, 1);
 
         loadCell (cell);
 
-        // adjust player
         mCurrentCell = cell;
-        playerCellChange (cell, position);
 
         // adjust fog
         mRendering.switchToInterior();
-        mRendering.configureFog(*cell);
+        mRendering.configureFog(*mCurrentCell);
+        
+        // adjust player
+        playerCellChange (mCurrentCell, position);
 
         // Sky system
         MWBase::Environment::get().getWorld()->adjustSky();
 
         mCellChanged = true;
+
+        MWBase::Environment::get().getWindowManager ()->loadingDone ();
     }
 
     void Scene::changeToExteriorCell (const ESM::Position& position)
@@ -312,166 +418,53 @@ namespace MWWorld
     void Scene::insertCell (Ptr::CellStore &cell)
     {
         // Loop through all references in the cell
-        insertCellRefList(mRendering, cell.activators, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.potions, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.appas, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.armors, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.books, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.clothes, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.containers, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.creatures, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.doors, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.ingreds, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.creatureLists, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.itemLists, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.lights, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.lockpicks, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.miscItems, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.npcs, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.probes, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.repairs, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.statics, cell, *mPhysics);
-        insertCellRefList(mRendering, cell.weapons, cell, *mPhysics);
-    }
-
-
-    /// \todo this whole code needs major clean up, and doesn't belong in this class.
-    void Scene::insertObject (const Ptr& ptr, CellStore* cell)
-    {
-        std::string type = ptr.getTypeName();
-
-        MWWorld::Ptr newPtr;
-
-        // insert into the correct CellRefList
-        if      (type == typeid(ESM::Potion).name())
-        {
-            MWWorld::LiveCellRef<ESM::Potion>* ref = ptr.get<ESM::Potion>();
-            cell->potions.list.push_back( *ref );
-            newPtr = MWWorld::Ptr(&cell->potions.list.back(), cell);
-        }
-        else if (type == typeid(ESM::Apparatus).name())
-        {
-            MWWorld::LiveCellRef<ESM::Apparatus>* ref = ptr.get<ESM::Apparatus>();
-            cell->appas.list.push_back( *ref );
-            newPtr = MWWorld::Ptr(&cell->appas.list.back(), cell);
-        }
-        else if (type == typeid(ESM::Armor).name())
-        {
-            MWWorld::LiveCellRef<ESM::Armor>* ref = ptr.get<ESM::Armor>();
-            cell->armors.list.push_back( *ref );
-            newPtr = MWWorld::Ptr(&cell->armors.list.back(), cell);
-        }
-        else if (type == typeid(ESM::Book).name())
-        {
-            MWWorld::LiveCellRef<ESM::Book>* ref = ptr.get<ESM::Book>();
-            cell->books.list.push_back( *ref );
-            newPtr = MWWorld::Ptr(&cell->books.list.back(), cell);
-        }
-        else if (type == typeid(ESM::Clothing).name())
-        {
-            MWWorld::LiveCellRef<ESM::Clothing>* ref = ptr.get<ESM::Clothing>();
-            cell->clothes.list.push_back( *ref );
-            newPtr = MWWorld::Ptr(&cell->clothes.list.back(), cell);
-        }
-        else if (type == typeid(ESM::Ingredient).name())
-        {
-            MWWorld::LiveCellRef<ESM::Ingredient>* ref = ptr.get<ESM::Ingredient>();
-            cell->ingreds.list.push_back( *ref );
-            newPtr = MWWorld::Ptr(&cell->ingreds.list.back(), cell);
-        }
-        else if (type == typeid(ESM::Light).name())
-        {
-            MWWorld::LiveCellRef<ESM::Light>* ref = ptr.get<ESM::Light>();
-            cell->lights.list.push_back( *ref );
-            newPtr = MWWorld::Ptr(&cell->lights.list.back(), cell);
-        }
-        else if (type == typeid(ESM::Tool).name())
-        {
-            MWWorld::LiveCellRef<ESM::Tool>* ref = ptr.get<ESM::Tool>();
-            cell->lockpicks.list.push_back( *ref );
-            newPtr = MWWorld::Ptr(&cell->lockpicks.list.back(), cell);
-        }
-        else if (type == typeid(ESM::Repair).name())
-        {
-            MWWorld::LiveCellRef<ESM::Repair>* ref = ptr.get<ESM::Repair>();
-            cell->repairs.list.push_back( *ref );
-            newPtr = MWWorld::Ptr(&cell->repairs.list.back(), cell);
-        }
-        else if (type == typeid(ESM::Probe).name())
-        {
-            MWWorld::LiveCellRef<ESM::Probe>* ref = ptr.get<ESM::Probe>();
-            cell->probes.list.push_back( *ref );
-            newPtr = MWWorld::Ptr(&cell->probes.list.back(), cell);
-        }
-        else if (type == typeid(ESM::Weapon).name())
-        {
-            MWWorld::LiveCellRef<ESM::Weapon>* ref = ptr.get<ESM::Weapon>();
-            cell->weapons.list.push_back( *ref );
-            newPtr = MWWorld::Ptr(&cell->weapons.list.back(), cell);
-        }
-        else if (type == typeid(ESM::Miscellaneous).name())
-        {
-
-            // if this is gold, we need to fetch the correct mesh depending on the amount of gold.
-            if (MWWorld::Class::get(ptr).getName(ptr) == MWBase::Environment::get().getWorld()->getStore().gameSettings.search("sGold")->str)
-            {
-                int goldAmount = ptr.getRefData().getCount();
-
-                std::string base = "Gold_001";
-                if (goldAmount >= 100)
-                    base = "Gold_100";
-                else if (goldAmount >= 25)
-                    base = "Gold_025";
-                else if (goldAmount >= 10)
-                    base = "Gold_010";
-                else if (goldAmount >= 5)
-                    base = "Gold_005";
-
-                MWWorld::ManualRef newRef (MWBase::Environment::get().getWorld()->getStore(), base);
-
-                MWWorld::LiveCellRef<ESM::Miscellaneous>* ref = newRef.getPtr().get<ESM::Miscellaneous>();
-
-                cell->miscItems.list.push_back( *ref );
-                newPtr = MWWorld::Ptr(&cell->miscItems.list.back(), cell);
-
-                ESM::Position& p = newPtr.getRefData().getPosition();
-                p.pos[0] = ptr.getRefData().getPosition().pos[0];
-                p.pos[1] = ptr.getRefData().getPosition().pos[1];
-                p.pos[2] = ptr.getRefData().getPosition().pos[2];
-            }
-            else
-            {
-                MWWorld::LiveCellRef<ESM::Miscellaneous>* ref = ptr.get<ESM::Miscellaneous>();
-
-                cell->miscItems.list.push_back( *ref );
-                newPtr = MWWorld::Ptr(&cell->miscItems.list.back(), cell);
-            }
-        }
-        else
-            throw std::runtime_error("Trying to insert object of unhandled type");
-
-
-
-        newPtr.getRefData().setCount(ptr.getRefData().getCount());
-        ptr.getRefData().setCount(0);
-        newPtr.getRefData().enable();
-
-        mRendering.addObject(newPtr);
-        MWWorld::Class::get(newPtr).insertObject(newPtr, *mPhysics);
-
+        insertCellRefList(mRendering, cell.mActivators, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mPotions, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mAppas, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mArmors, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mBooks, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mClothes, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mContainers, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mCreatures, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mDoors, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mIngreds, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mCreatureLists, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mItemLists, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mLights, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mLockpicks, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mMiscItems, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mNpcs, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mProbes, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mRepairs, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mStatics, cell, *mPhysics);
+        insertCellRefList(mRendering, cell.mWeapons, cell, *mPhysics);
     }
 
     void Scene::addObjectToScene (const Ptr& ptr)
     {
-        mRendering.addObject (ptr);
-        MWWorld::Class::get (ptr).insertObject (ptr, *mPhysics);
+        mRendering.addObject(ptr);
+        MWWorld::Class::get(ptr).insertObject(ptr, *mPhysics);
+        MWBase::Environment::get().getWorld()->rotateObject(ptr, 0, 0, 0, true);
+        MWBase::Environment::get().getWorld()->scaleObject(ptr, ptr.getCellRef().mScale);
     }
 
     void Scene::removeObjectFromScene (const Ptr& ptr)
     {
-        MWBase::Environment::get().getMechanicsManager()->removeActor (ptr);
+        MWBase::Environment::get().getMechanicsManager()->remove (ptr);
         MWBase::Environment::get().getSoundManager()->stopSound3D (ptr);
         mPhysics->removeObject (ptr.getRefData().getHandle());
         mRendering.removeObject (ptr);
+    }
+
+    bool Scene::isCellActive(const CellStore &cell)
+    {
+        CellStoreCollection::iterator active = mActiveCells.begin();
+        while (active != mActiveCells.end()) {
+            if (**active == cell) {
+                return true;
+            }
+            ++active;
+        }
+        return false;
     }
 }

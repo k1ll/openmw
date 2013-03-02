@@ -6,6 +6,9 @@
 #include "customdata.hpp"
 #include "cellstore.hpp"
 
+#include "../mwbase/environment.hpp"
+#include "../mwbase/world.hpp"
+
 namespace MWWorld
 {
     void RefData::copy (const RefData& refData)
@@ -29,7 +32,7 @@ namespace MWWorld
     }
 
     RefData::RefData (const ESM::CellRef& cellRef)
-    : mBaseNode(0), mHasLocals (false), mEnabled (true), mCount (1), mPosition (cellRef.pos),
+    : mBaseNode(0), mHasLocals (false), mEnabled (true), mCount (1), mPosition (cellRef.mPos),
       mCustomData (0)
     {}
 
@@ -75,6 +78,9 @@ namespace MWWorld
 
     std::string RefData::getHandle()
     {
+        if (!mBaseNode)
+            return "";
+            
         return mBaseNode->getName();
     }
 
@@ -104,6 +110,9 @@ namespace MWWorld
 
     void RefData::setCount (int count)
     {
+        if(count == 0)
+            MWBase::Environment::get().getWorld()->removeRefScript(this);
+        
         mCount = count;
     }
 

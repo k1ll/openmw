@@ -1,10 +1,25 @@
-#ifndef _ESM_CELL_H
-#define _ESM_CELL_H
+#ifndef OPENMW_ESM_CELL_H
+#define OPENMW_ESM_CELL_H
 
-#include "esm_reader.hpp"
+#include <string>
+#include <vector>
+#include <list>
+
+#include "esmcommon.hpp"
 #include "defs.hpp"
 
-namespace ESM {
+
+namespace MWWorld
+{
+    class ESMStore;
+}
+
+
+namespace ESM
+{
+
+class ESMReader;
+class ESMWriter;
 
 /* Cell reference. This represents ONE object (of many) inside the
    cell. The cell references are not loaded as part of the normal
@@ -14,64 +29,95 @@ namespace ESM {
 class CellRef
 {
 public:
-  int refnum;           // Reference number
-  std::string refID;    // ID of object being referenced
+  int mRefnum;           // Reference number
+  std::string mRefID;    // ID of object being referenced
 
-  float scale;          // Scale applied to mesh
+  float mScale;          // Scale applied to mesh
 
   // The NPC that owns this object (and will get angry if you steal
   // it)
-  std::string owner;
+  std::string mOwner;
 
   // I have no idea, looks like a link to a global variable?
-  std::string glob;
+  std::string mGlob;
 
   // ID of creature trapped in this soul gem (?)
-  std::string soul;
+  std::string mSoul;
 
   // ?? CNAM has a faction name, might be for objects/beds etc
   // belonging to a faction.
-  std::string faction;
+  std::string mFaction;
 
   // INDX might be PC faction rank required to use the item? Sometimes
   // is -1, which I assume means "any rank".
-  int factIndex;
+  int mFactIndex;
 
   // Depends on context - possibly weapon health, number of uses left
   // or weapon magic charge?
-  float charge;
+  float mCharge;
 
   // I have no idea, these are present some times, often along with
   // owner (ANAM) and sometimes otherwise. They are often (but not
   // always) 1. INTV is big for lights (possibly a float?), might have
   // something to do with remaining light "charge".
-  int intv, nam9;
+  int mIntv, mNam9;
 
   // For doors - true if this door teleports to somewhere else, false
   // if it should open through animation.
-  bool teleport;
+  bool mTeleport;
 
   // Teleport location for the door, if this is a teleporting door.
-  Position doorDest;
+  Position mDoorDest;
 
   // Destination cell for doors (optional)
-  std::string destCell;
+  std::string mDestCell;
 
   // Lock level for doors and containers
-  int lockLevel;
-  std::string key, trap; // Key and trap ID names, if any
+  int mLockLevel;
+  std::string mKey, mTrap; // Key and trap ID names, if any
 
   // No idea - occurs ONCE in Morrowind.esm, for an activator
-  char unam;
+  signed char mUnam;
+
+  // Track deleted references. 0 - not deleted, 1 - deleted, but respawns, 2 - deleted and does not respawn.
+  int mDeleted;
 
   // Occurs in Tribunal.esm, eg. in the cell "Mournhold, Plaza
   // Brindisi Dorom", where it has the value 100. Also only for
   // activators.
-  int fltv;
+  int mFltv;
+  int mNam0;
 
   // Position and rotation of this object within the cell
-  Position pos;
+  Position mPos;
+
+  void save(ESMWriter &esm);
 };
+
+/* Moved cell reference tracking object. This mainly stores the target cell
+        of the reference, so we can easily know where it has been moved when another
+        plugin tries to move it independently.
+    Unfortunately, we need to implement this here.
+    */
+class MovedCellRef
+{
+public:
+    int mRefnum;
+
+    // Target cell (if exterior)
+    int mTarget[2];
+
+    // TODO: Support moving references between exterior and interior cells!
+    //  This may happen in saves, when an NPC follows the player. Tribunal
+    //  introduces a henchman (which no one uses), so we may need this as well.
+};
+
+/// Overloaded copare operator used to search inside a list of cell refs.
+bool operator==(const MovedCellRef& ref, int pRefnum);
+bool operator==(const CellRef& ref, int pRefnum);
+
+typedef std::list<MovedCellRef> MovedCellRefTracker;
+typedef std::list<CellRef> CellRefTracker;
 
 /* Cells hold data about objects, creatures, statics (rocks, walls,
    buildings) and landscape (for exterior cells). Cells frequently
@@ -94,44 +140,56 @@ struct Cell
 
   struct DATAstruct
   {
-    int flags;
-    int gridX, gridY;
+    int mFlags;
+    int mX, mY;
   };
 
   struct AMBIstruct
   {
-    Color ambient, sunlight, fog;
-    float fogDensity;
+    Color mAmbient, mSunlight, mFog;
+    float mFogDensity;
   };
 
   // Interior cells are indexed by this (it's the 'id'), for exterior
   // cells it is optional.
-  std::string name,
+  std::string mName;
 
   // Optional region name for exterior and quasi-exterior cells.
-    region;
+  std::string mRegion;
 
-  ESM_Context context; // File position
-  DATAstruct data;
-  AMBIstruct ambi;
-  float water; // Water level
-  int mapColor;
+  std::vector<ESM_Context> mContextList; // File position; multiple positions for multiple plugin support
+  DATAstruct mData;
+  AMBIstruct mAmbi;
+  float mWater; // Water level
+  bool mWaterInt;
+  int mMapColor;
+  int mNAM0;
 
-  void load(ESMReader &esm);
+  // References "leased" from another cell (i.e. a different cell
+  //  introduced this ref, and it has been moved here by a plugin)
+  CellRefTracker mLeasedRefs;
+  MovedCellRefTracker mMovedRefs;
+
+  void load(ESMReader &esm, MWWorld::ESMStore &store);
+
+  // This method is left in for compatibility with esmtool. Parsing moved references currently requires
+  //  passing ESMStore, bit it does not know about this parameter, so we do it this way.
+  void load(ESMReader &esm) {};
+  void save(ESMWriter &esm);
 
   bool isExterior() const
   {
-      return !(data.flags & Interior);
+      return !(mData.mFlags & Interior);
   }
 
   int getGridX() const
   {
-      return data.gridX;
+      return mData.mX;
   }
 
   int getGridY() const
   {
-      return data.gridY;
+      return mData.mY;
   }
 
   // Restore the given reader to the stored position. Will try to open
@@ -139,7 +197,7 @@ struct Cell
   // somewhere other than the file system, you need to pre-open the
   // ESMReader, and the filename must match the stored filename
   // exactly.
-  void restore(ESMReader &esm) const;
+  void restore(ESMReader &esm, int iCtx) const;
 
   std::string getDescription() const;
   ///< Return a short string describing the cell (mostly used for debugging/logging purpose)
@@ -151,6 +209,11 @@ struct Cell
      reuse one memory location without blanking it between calls.
   */
   static bool getNextRef(ESMReader &esm, CellRef &ref);
+
+  /* This fetches an MVRF record, which is used to track moved references.
+   * Since they are comparably rare, we use a separate method for this.
+   */
+  static bool getNextMVRF(ESMReader &esm, MovedCellRef &mref);
 };
 }
 #endif
