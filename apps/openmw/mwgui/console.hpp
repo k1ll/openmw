@@ -108,9 +108,9 @@ namespace MWGui
 
     void acceptCommand(MyGUI::EditBox* _sender);
 
-    std::string complete(const std::string input, std::vector<std::string> &matches, const std::vector<std::string> &in_keywords);
+    std::string complete(const std::string input, std::vector<std::string> &matches, const std::vector<std::string> &in_keywords, int &cursorPos);
 
-    int getSplitPos(const std::string input);
+    int getSplitPos(const std::string input, int cursorPos);
 
     std::string findMatches(const std::string input, std::vector<std::string> &matches, const std::vector<std::string> &in_keywords);
 

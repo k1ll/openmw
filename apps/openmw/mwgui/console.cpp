@@ -227,14 +227,17 @@ namespace MWGui
         {
             std::vector<std::string> matches;
             std::string current;
+            int cursorPos = static_cast<int>(command->getTextCursor());
 
             listNames();
 
             if(mCompletionMode >= 1)
             {
-                current=complete(command->getCaption(), matches, mNames);
+                current=complete(command->getCaption(), matches, mNames, cursorPos);
 
                 command->setCaption(current);
+                command->setTextCursor(cursorPos);
+
                 /* Display completition possibilites when tab is pressed atleast twice (the input stayed the same ). */
                 if((mCompletionMode == 2) && (matches.size() > 1) && (command->getCaption() == mLastComplete))
                 {
@@ -312,12 +315,13 @@ namespace MWGui
         command->setCaption("");
     }
 
-    std::string Console::complete(const std::string input, std::vector<std::string> &matches, const std::vector<std::string> &in_keywords)
+    std::string Console::complete(const std::string input, std::vector<std::string> &matches, const std::vector<std::string> &in_keywords, int &cursorPos)
     {
         int splitPos;
-        std::string output;
-        splitPos = getSplitPos(input);
-        output = findMatches(input.substr(splitPos), matches, in_keywords);
+        std::string output, rest;
+        splitPos = getSplitPos(input, cursorPos);
+        output = findMatches(input.substr(splitPos, cursorPos-splitPos), matches, in_keywords);
+        rest = input.substr(cursorPos, std::string::npos);
 
         //Combine the completed string with the base string and add quotation marks where necessary
         if(matches.size() > 0)
@@ -332,14 +336,20 @@ namespace MWGui
                 if(matches.size() == 1)
                     output += "\" ";
 
-                return output;
+                cursorPos = output.length();
+                return output + rest;
             }
             else
             {
-                if(matches.size() == 1)
-                    return input.substr(0, splitPos) + output + ' ';
+                if(matches.size() == 1) {
+                    output = input.substr(0, splitPos) + output + ' ';
+                }
+                else {
+                    output = input.substr(0, splitPos) + output;
+                }
 
-                return input.substr(0, splitPos) + output;
+                cursorPos = output.length();
+                return output + rest;
             }
         }
 
@@ -348,12 +358,12 @@ namespace MWGui
 
     //Searches and returns the position which most likely is the start of the string which should be completed
 
-    int Console::getSplitPos(const std::string input)
+    int Console::getSplitPos(const std::string input, int cursorPos)
     {
         int splitPos=0;
         bool openQuote=false;
 
-        for(int i = 0; i < static_cast<int>(input.length()); i++) {
+        for(int i = 0; (i < static_cast<int>(input.length())) && (i < cursorPos); i++) {
             switch(input[i]) {
             case '"':
                     if(openQuote)
