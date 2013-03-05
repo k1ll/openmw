@@ -219,7 +219,7 @@ namespace MWGui
         }
     }
 
-    void Console::keyPress(MyGUI::WidgetPtr _sender,
+    void Console::keyPress(MyGUI::Widget* _sender,
                   MyGUI::KeyCode key,
                   MyGUI::Char _char)
     {
@@ -296,7 +296,7 @@ namespace MWGui
         }
     }
 
-    void Console::acceptCommand(MyGUI::EditPtr _sender)
+    void Console::acceptCommand(MyGUI::EditBox* _sender)
     {
         const std::string &cm = command->getCaption();
         if(cm.empty()) return;
