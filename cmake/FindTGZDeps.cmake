@@ -41,20 +41,12 @@ macro (find_tgz_deps)
 	#TODO: Use find_package for libboost_date_time aswell - Ogre depends on it
 	exec_program("dirname" ARGS ${Boost_FILESYSTEM_LIBRARY} OUTPUT_VARIABLE BOOSTDIR)
 	
-	if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
-		### Didn't build boost debug libs yet. No idea if i should
-		SET(Boost_DATE_TIME_LIBRARY_DBG ${BOOSTDIR}/libboost_date_time.so)
-		#TODO Use find_package for libboost_wave aswell -- Shiny depends on it
-		SET(Boost_WAVE_LIBRARY_DBG ${BOOSTDIR}/libboost_wave.so)
-		#TODO Use find_package for libboost_chrono aswell -- libboost_wave depends on it
-		SET(Boost_CHRONO_LIBRARY_DBG ${BOOSTDIR}/libboost_chrono.so)
-	else()
-		SET(Boost_DATE_TIME_LIBRARY ${BOOSTDIR}/libboost_date_time.so)
-		#TODO Use find_package for libboost_wave aswell -- Shiny depends on it
-		SET(Boost_WAVE_LIBRARY ${BOOSTDIR}/libboost_wave.so)
-		#TODO Use find_package for libboost_chrono aswell -- libboost_wave depends on it
-		SET(Boost_CHRONO_LIBRARY ${BOOSTDIR}/libboost_chrono.so)
-	endif()	
+	SET(BOOST_PACKAGE_COMPONENTS libboost_date_time)
+	if(${SHINY_USE_WAVE_SYSTEM_INSTALL})
+		SET(BOOST_PACKAGE_COMPONENTS ${BOOST_PACKAGE_COMPONENTS} chrono)
+	endif()
+
+	find_package(Boost REQUIRED COMPONENTS ${BOOST_PACKAGE_COMPONENTS})
 
 	#FIXME: Item names do not correspond linked names. How can we find those?
 
