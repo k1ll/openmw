@@ -37,11 +37,8 @@ macro (find_tgz_deps)
 	#Cg always gets distributed only as libCg.so so we can copy it directly
 	INSTALL(FILES "${Cg_LIBRARY_REL}" DESTINATION "./lib" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
 
-	#TODO: There are still many other libraries linked into the binaries or libraries which may not be present on all systems. What should we do with them? 
-	#TODO: Use find_package for libboost_date_time aswell - Ogre depends on it
 	exec_program("dirname" ARGS ${Boost_FILESYSTEM_LIBRARY} OUTPUT_VARIABLE BOOSTDIR)
 	
-	SET(BOOST_PACKAGE_COMPONENTS libboost_date_time)
 	if(${SHINY_USE_WAVE_SYSTEM_INSTALL})
 		SET(BOOST_PACKAGE_COMPONENTS ${BOOST_PACKAGE_COMPONENTS} chrono)
 	endif()
