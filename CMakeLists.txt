@@ -446,15 +446,12 @@ if(BUILD_TGZ)
     INSTALL(FILES "${OpenMW_BINARY_DIR}/transparency-overrides.cfg" DESTINATION "." PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
     INSTALL(FILES "${OpenMW_BINARY_DIR}/openmw.cfg.install" DESTINATION "." RENAME "openmw.cfg" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
 
-    #Install resources, launcher.qss and launcher.cfg
+    #Install resources
     INSTALL(DIRECTORY "${OpenMW_BINARY_DIR}/resources" DESTINATION "." FILE_PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "Resources")
-    INSTALL(FILES "${OpenMW_BINARY_DIR}/launcher.qss" DESTINATION "./resources")
-	#Fallback like in launcher/CMakeLists.txt
-    INSTALL(FILES "${OpenMW_BINARY_DIR}/launcher.qss" DESTINATION ".")
 
 	#TODO:This can be used with the next version - when FindOgre.cmake is updated
 	FOREACH(plugin ${USED_OGRE_PLUGINS})
-		INSTALL(FILES "${OGRE_PLUGIN_DIR_REL}/${plugin}.so" DESTINATION "./plugins/" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+		INSTALL(FILES "${OGRE_PLUGIN_DIR_REL}/${plugin}" DESTINATION "./plugins/" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
 	ENDFOREACH()
 
     find_tgz_deps()
