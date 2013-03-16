@@ -449,11 +449,15 @@ if(BUILD_TGZ)
     #Install resources
     INSTALL(DIRECTORY "${OpenMW_BINARY_DIR}/resources" DESTINATION "." FILE_PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "Resources")
 
-    #TODO: There probably is a cleaner way to do this ...
-    FOREACH(plugin ${USED_OGRE_PLUGINS})
-        exec_program("readlink" ARGS $plugin} OUTPUT_VARIABLE real_plugin)
-        INSTALL(FILES "${real_plugin}" DESTINATION "./plugins/" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
-    ENDFOREACH()
+    set(PLUGINS "")
+    set(ABSOLUTE_PLUGINS "")
+
+    foreach (PLUGIN ${USED_OGRE_PLUGINS})
+        get_filename_component(PLUGIN_ABS ${PLUGIN} REALPATH)
+        set(ABSOLUTE_PLUGINS ${PLUGIN_ABS} ${ABSOLUTE_PLUGINS})
+    endforeach ()
+
+    install(FILES ${ABSOLUTE_PLUGINS} DESTINATION "./plugins" COMPONENT Runtime)
 
     find_tgz_deps()
 
