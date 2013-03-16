@@ -449,10 +449,11 @@ if(BUILD_TGZ)
     #Install resources
     INSTALL(DIRECTORY "${OpenMW_BINARY_DIR}/resources" DESTINATION "." FILE_PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "Resources")
 
-	#TODO:This can be used with the next version - when FindOgre.cmake is updated
-	FOREACH(plugin ${USED_OGRE_PLUGINS})
-		INSTALL(FILES "${OGRE_PLUGIN_DIR_REL}/${plugin}" DESTINATION "./plugins/" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
-	ENDFOREACH()
+    #TODO: There probably is a cleaner way to do this ...
+    FOREACH(plugin ${USED_OGRE_PLUGINS})
+        exec_program("readlink" ARGS $plugin} OUTPUT_VARIABLE real_plugin)
+        INSTALL(FILES "${real_plugin}" DESTINATION "./plugins/" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+    ENDFOREACH()
 
     find_tgz_deps()
 
