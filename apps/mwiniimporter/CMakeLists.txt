@@ -23,6 +23,10 @@ if(BUILD_TGZ)
     exec_program("uname" ARGS "-m" OUTPUT_VARIABLE ARCH)
     SET_TARGET_PROPERTIES(mwiniimport
                           PROPERTIES OUTPUT_NAME mwiniimport.${ARCH})
+else()
+    if(DPKG_PROGRAM)
+        INSTALL(TARGETS mwiniimport RUNTIME DESTINATION games COMPONENT mwiniimport)
+    endif()
 endif(BUILD_TGZ)
 
 if (BUILD_WITH_CODE_COVERAGE)
