@@ -431,6 +431,10 @@ if(BUILD_TGZ)
         else()
             SET(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${KERNEL}${ARCH}")
         endif()
+
+        if(TGZ_RC)
+            SET(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}RC")
+        endif
     endif()
     SET(CPACK_INCLUDE_TOPLEVEL_DIRECTORY 1)
 
