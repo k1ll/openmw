@@ -434,7 +434,7 @@ if(BUILD_TGZ)
 
         if(TGZ_RC)
             SET(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}RC")
-        endif
+        endif()
     endif()
     SET(CPACK_INCLUDE_TOPLEVEL_DIRECTORY 1)
 
