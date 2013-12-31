@@ -1,5 +1,4 @@
 macro (find_tgz_deps)
-
 	set(FREEIMAGE_LIBRARY "/usr/lib/libfreeimage.so.3")
 	#Don't package pthread it's just too system dependant
 	#set(PTHREAD_LIBRARY "/lib/libpthread.so.0")
@@ -38,8 +37,11 @@ macro (find_tgz_deps)
 
 	INSTALL(FILES "${SDL2_LIBRARY_REAL}.2.0.0" DESTINATION "./lib" RENAME libSDL2.so.0 PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
 
-	#Cg always gets distributed only as libCg.so so we can copy it directly
-	INSTALL(FILES "${Cg_LIBRARY_REL}" DESTINATION "./lib" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+	if(OGRE_Plugin_CgProgramManager_FOUND)
+		find_package(Cg REQUIRED)
+		#Cg always gets distributed only as libCg.so so we can copy it directly
+		INSTALL(FILES "${Cg_LIBRARY_REL}" DESTINATION "./lib" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+	endif()
 
 	exec_program("dirname" ARGS ${Boost_FILESYSTEM_LIBRARY} OUTPUT_VARIABLE BOOSTDIR)
 	

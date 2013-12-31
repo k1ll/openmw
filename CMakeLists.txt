@@ -255,10 +255,18 @@ if (APPLE OR BUILD_TGZ)
     if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
         SET(USED_OGRE_PLUGINS ${OGRE_RenderSystem_GL_LIBRARY_DBG}
                               ${OGRE_Plugin_ParticleFX_LIBRARY_DBG})
+        if(OGRE_Plugin_CgProgramManager_FOUND)
+            SET(USED_OGRE_PLUGINS ${USED_OGRE_PLUGINS}
+                                  ${OGRE_Plugin_CgProgramManager_LIBRARY_DBG})
+        endif()
     else()
         SET(USED_OGRE_PLUGINS ${OGRE_RenderSystem_GL_LIBRARY_REL}
                               ${OGRE_Plugin_ParticleFX_LIBRARY_REL})
-   endif()
+        if(OGRE_Plugin_CgProgramManager_FOUND)
+            SET(USED_OGRE_PLUGINS ${USED_OGRE_PLUGINS}
+                                  ${OGRE_Plugin_CgProgramManager_LIBRARY_REL})
+        endif()
+    endif()
 
     # Actually we must use OGRE_Plugin_CgProgramManager_FOUND but it's
     # not reliable and equals TRUE even if there's no Ogre Cg plugin
@@ -400,7 +408,6 @@ endif (CMAKE_CXX_COMPILER_ID STREQUAL GNU OR CMAKE_CXX_COMPILER_ID STREQUAL Clan
 #They are added manually so the locations can't be configured via CMake 
 if(BUILD_TGZ)
     message(TGZ PKG SPRT)
-    find_package(Cg REQUIRED)
     include(FindTGZDeps)
 
     set(PACKAGE_MAINTAINER "unkown")
