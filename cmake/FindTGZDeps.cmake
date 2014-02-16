@@ -81,6 +81,9 @@ macro (find_tgz_deps)
 
 	exec_program("dirname" ARGS ${Boost_FILESYSTEM_LIBRARY} OUTPUT_VARIABLE BOOSTDIR)
 	
+	#dirty hack to keep the right boost libs for linking
+	set(BOOST_TMP_LIBS ${Boost_LIBRARIES})
+	
 	if(Boost_VERSION GREATER 104900)
 		SET(BOOST_PACKAGE_COMPONENTS ${BOOST_PACKAGE_COMPONENTS} chrono)
 	endif()
@@ -88,6 +91,8 @@ macro (find_tgz_deps)
 	SET(BOOST_PACKAGE_COMPONENTS ${BOOST_PACKAGE_COMPONENTS} thread date_time wave)
 
 	find_package(Boost REQUIRED COMPONENTS ${BOOST_PACKAGE_COMPONENTS})
+
+	set(Boost_LIBRARIES ${BOOST_TMP_LIBS})
 
 	#FIXME: Item names do not correspond linked names. How can we find those?
 
