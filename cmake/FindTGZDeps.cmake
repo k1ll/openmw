@@ -73,6 +73,8 @@ macro (find_tgz_deps)
 
 	INSTALL(FILES "${SDL2_LIBRARY_REAL}-2.0.so.0.1.0" DESTINATION "./lib" RENAME libSDL2-2.0.so.0 PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
 
+        INSTALL(FILES "/usr/lib/${MULTIARCH_PATH}/liblcms.so.1.0.19" DESTINATION "./lib" RENAME "liblcms.so.1" PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ COMPONENT "openmw")
+
 	if(OGRE_Plugin_CgProgramManager_FOUND)
 		find_package(Cg REQUIRED)
 		#Cg always gets distributed only as libCg.so so we can copy it directly
