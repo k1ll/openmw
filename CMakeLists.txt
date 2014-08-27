@@ -479,6 +479,11 @@ if(BUILD_TGZ)
         configure_file ("${OpenMW_SOURCE_DIR}/files/opencs.sh.cmake" "${OpenMW_BINARY_DIR}/files/opencs.sh" @ONLY)
 	INSTALL(FILES "${OpenMW_BINARY_DIR}/files/opencs.sh" DESTINATION "." RENAME "opencs" PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ WORLD_READ COMPONENT "opencs")
     ENDIF(BUILD_OPENCS)
+    IF(BUILD_NIFTEST)
+        INSTALL(PROGRAMS "${OpenMW_BINARY_DIR}/niftest.${ARCH}" DESTINATION "." )
+        configure_file ("${OpenMW_SOURCE_DIR}/files/niftest.sh.cmake" "${OpenMW_BINARY_DIR}/files/niftest.sh" @ONLY)
+	INSTALL(FILES "${OpenMW_BINARY_DIR}/files/niftest.sh" DESTINATION "." RENAME "niftest" PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ WORLD_READ COMPONENT "niftest")
+    ENDIF(BUILD_NIFTEST)
 
     # Install licenses
     INSTALL(FILES "docs/license/DejaVu Font License.txt" DESTINATION "." )
