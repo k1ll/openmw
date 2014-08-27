@@ -1,7 +1,5 @@
 #!/bin/sh
 
-ARCH=$(uname -m)
-
 readlink() {
 	path=$1
  
@@ -30,4 +28,4 @@ GAMEDIR=$(dirname "${SCRIPT}")
 cd $GAMEDIR
 
 export LD_LIBRARY_PATH="./lib"
-./esmtool.${ARCH} "$@"
+./esmtool.@ARCH@ "$@"
