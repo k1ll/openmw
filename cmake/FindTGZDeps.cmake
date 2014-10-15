@@ -120,6 +120,13 @@ macro (find_tgz_deps)
 	${VORBISENC_LIBRARY} ${VORBIS_LIBRARY} ${OGG_LIBRARY} ${ZZIP_LIBRARY} ${FFMPEG_LIBRARIES} "${OPENAL_DIRNAME}/${REAL_OPENAL_LIBRARY}")
 
     if(BUILD_LAUNCHER)
+        #This is also done in the Main CMakeLists.txt
+        #but after the call to find_tgz_deps
+        find_package(LIBUNSHIELD REQUIRED)
+        if(NOT LIBUNSHIELD_FOUND)
+               message(SEND_ERROR "Failed to find libunshield")
+        endif(NOT LIBUNSHIELD_FOUND)
+
         set(LIBITEMS ${LIBITEMS} ${LIBUNSHIELD_LIBRARY})
     endif()
 
