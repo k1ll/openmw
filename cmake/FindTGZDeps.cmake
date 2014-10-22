@@ -7,6 +7,7 @@ macro (find_tgz_deps)
 	endif()
 
 	set(FREEIMAGE_LIBRARY "/usr/lib/libfreeimage.so.3")
+	set(JPEG_LIBRARY "/usr/lib/${MULTIARCH_PATH}/libjpeg.so.8")
 	#Don't package pthread it's just too system dependant
 	#set(PTHREAD_LIBRARY "/lib/libpthread.so.0")
 	set(UUID_LIBRARY "/lib/${MULTIARCH_PATH}/libuuid.so.1")
@@ -116,7 +117,7 @@ macro (find_tgz_deps)
 
 	#Libs that are linked with major version numbers
 	set(LIBITEMS ${BULLET_DYNAMICS_LIBRARY} ${BULLET_COLLISION_LIBRARY} ${BULLET_MATH_LIBRARY} ${BULLET_SOFTBODY_LIBRARY}
-	${MPG123_LIBRARY} ${FREETYPE_LIBRARY} ${SNDFILE_LIBRARY} ${PNG_LIBRARY} ${UUID_LIBRARY}	${FLAC_LIBRARY}
+	${MPG123_LIBRARY} ${FREETYPE_LIBRARY} ${SNDFILE_LIBRARY} ${PNG_LIBRARY} ${JPEG_LIBRARY} ${UUID_LIBRARY}	${FLAC_LIBRARY}
 	${VORBISENC_LIBRARY} ${VORBIS_LIBRARY} ${OGG_LIBRARY} ${ZZIP_LIBRARY} ${SOUND_INPUT_LIBRARY} "${OPENAL_DIRNAME}/${REAL_OPENAL_LIBRARY}")
 
     if(BUILD_LAUNCHER)
