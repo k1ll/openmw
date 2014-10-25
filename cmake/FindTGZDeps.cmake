@@ -16,6 +16,7 @@ macro (find_tgz_deps)
 	set(VORBIS_LIBRARY "/usr/lib/${MULTIARCH_PATH}/libvorbis.so")
 	set(OGG_LIBRARY "/usr/lib/${MULTIARCH_PATH}/libogg.so")
 	set(ZZIP_LIBRARY "/usr/lib/libzzip.so")
+	set(GOMP_LIBRARY "/usr/lib/${MULTIARCH_PATH}/libgomp.so.1")
 	#set(PNG_LIBRARY "/lib/libpng12.so.0")
 
 	### FIXME: just install these for now can be changed later ###
@@ -117,8 +118,9 @@ macro (find_tgz_deps)
 
 	#Libs that are linked with major version numbers
 	set(LIBITEMS ${BULLET_DYNAMICS_LIBRARY} ${BULLET_COLLISION_LIBRARY} ${BULLET_MATH_LIBRARY} ${BULLET_SOFTBODY_LIBRARY}
-	${MPG123_LIBRARY} ${FREETYPE_LIBRARY} ${SNDFILE_LIBRARY} ${PNG_LIBRARY} ${JPEG_LIBRARY} ${UUID_LIBRARY}	${FLAC_LIBRARY}
-	${VORBISENC_LIBRARY} ${VORBIS_LIBRARY} ${OGG_LIBRARY} ${ZZIP_LIBRARY} ${SOUND_INPUT_LIBRARY} "${OPENAL_DIRNAME}/${REAL_OPENAL_LIBRARY}")
+	${MPG123_LIBRARY} ${FREETYPE_LIBRARY} ${SNDFILE_LIBRARY} ${PNG_LIBRARY} ${JPEG_LIBRARY} ${GOMP_LIBRARY} ${UUID_LIBRARY}
+	${FLAC_LIBRARY} ${VORBISENC_LIBRARY} ${VORBIS_LIBRARY} ${OGG_LIBRARY} ${ZZIP_LIBRARY} ${SOUND_INPUT_LIBRARY}
+	"${OPENAL_DIRNAME}/${REAL_OPENAL_LIBRARY}")
 
     if(BUILD_LAUNCHER)
         #This is also done in the Main CMakeLists.txt
