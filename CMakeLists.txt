@@ -515,7 +515,7 @@ if(BUILD_TGZ)
     foreach (PLUGIN ${USED_OGRE_PLUGINS})
         get_filename_component(PLUGIN_ABS ${PLUGIN} REALPATH)
         get_filename_component(PLUGIN_NAME ${PLUGIN} NAME)
-        install(FILES ${PLUGIN_ABS} DESTINATION "./plugins" RENAME "${PLUGIN_NAME}" COMPONENT Runtime)
+        install(FILES ${PLUGIN_ABS} DESTINATION "./plugins" RENAME "${PLUGIN_NAME}" PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE COMPONENT Runtime)
     endforeach ()
 
     find_tgz_deps()
