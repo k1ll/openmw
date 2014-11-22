@@ -122,9 +122,18 @@ if (OPENMW_USE_UNSHIELD)
 endif()
 
 
+if(BUILD_TGZ)
+    INSTALL(TARGETS openmw-wizard RUNTIME DESTINATION "." COMPONENT openmw-wizard)
+        exec_program("uname" ARGS "-m" OUTPUT_VARIABLE ARCH)
+        SET_TARGET_PROPERTIES(openmw-wizard
+                                  PROPERTIES OUTPUT_NAME openmw-wizard.${ARCH})
+else(BUILD_TGZ)
 if(DPKG_PROGRAM)
     INSTALL(TARGETS openmw-wizard RUNTIME DESTINATION games COMPONENT openmw-wizard)
 endif()
+endif(BUILD_TGZ)
+
+
 
 if (BUILD_WITH_CODE_COVERAGE)
   add_definitions (--coverage)
