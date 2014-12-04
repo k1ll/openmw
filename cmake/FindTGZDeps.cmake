@@ -168,7 +168,7 @@ string(REGEX REPLACE "optimized(.*)/libOgreMain.sodebug.*" "\\1" OGRE_LIB_DIR ${
 		${Boost_CHRONO_LIBRARY_DBG} ${OIS_LIBRARY_REL} "${OGRE_LIB_DIR}/libOgreMain_d.so" "${OGRE_LIB_DIR}/libOgreTerrain_d.so" "${OGRE_LIB_DIR}/libOgrePaging_d.so")
 	else()
 		set(LIBITEMS ${Boost_DATE_TIME_LIBRARY} ${Boost_FILESYSTEM_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY} ${Boost_SYSTEM_LIBRARY} ${Boost_THREAD_LIBRARY} ${Boost_WAVE_LIBRARY}
-		${Boost_CHRONO_LIBRARY} ${OIS_LIBRARY_REL} "${OGRE_LIB_DIR}/libOgreMain.so" "${OGRE_LIB_DIR}/libOgreTerrain.so" "${OGRE_LIB_DIR}/libOgrePaging.so")
+		${Boost_CHRONO_LIBRARY} ${OIS_LIBRARY_REL} "${OGRE_LIB_DIR}/libOgreMain.so" "${OGRE_LIB_DIR}/libOgreOverlay.so" "${OGRE_LIB_DIR}/libOgreTerrain.so" "${OGRE_LIB_DIR}/libOgrePaging.so")
 		#Opencs currently always builds in debug mode - disabled for targz package now
 		#if(BUILD_OPENCS)
 		#	set(LIBITEMS ${LIBITEMS} "${OGRE_LIB_DIR}/libOgreMain_d.so")
