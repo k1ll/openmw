@@ -3,6 +3,10 @@
 
 #include <memory>
 
+#ifdef __MINGW32__
+#include <wbemcli.h>
+#endif
+
 #include <boost/interprocess/sync/file_lock.hpp>
 #include <boost/filesystem/fstream.hpp>
 
