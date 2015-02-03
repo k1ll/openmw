@@ -37,6 +37,13 @@ target_link_libraries(openmw-essimporter
     components
 )
 
+if(BUILD_TGZ)
+    INSTALL(TARGETS openmw-essimporter RUNTIME DESTINATION "." COMPONENT openmw-essimporter)
+        exec_program("uname" ARGS "-m" OUTPUT_VARIABLE ARCH)
+        SET_TARGET_PROPERTIES(openmw-essimporter
+                                  PROPERTIES OUTPUT_NAME openmw-essimporter.${ARCH})
+endif(BUILD_TGZ)
+
 if (BUILD_WITH_CODE_COVERAGE)
   add_definitions (--coverage)
   target_link_libraries(openmw-essimporter gcov)
