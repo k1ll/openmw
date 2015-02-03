@@ -211,10 +211,10 @@ target_link_libraries(openmw-cs
 )
 
 if(BUILD_TGZ)
-    INSTALL(TARGETS opencs RUNTIME DESTINATION "." COMPONENT opencs)
+    INSTALL(TARGETS openmw-cs RUNTIME DESTINATION "." COMPONENT openmw-cs)
     exec_program("uname" ARGS "-m" OUTPUT_VARIABLE ARCH)
-    SET_TARGET_PROPERTIES(opencs
-                          PROPERTIES OUTPUT_NAME opencs.${ARCH})
+    SET_TARGET_PROPERTIES(openmw-cs
+                          PROPERTIES OUTPUT_NAME openmw-cs.${ARCH})
 endif(BUILD_TGZ)
 
 if(APPLE)

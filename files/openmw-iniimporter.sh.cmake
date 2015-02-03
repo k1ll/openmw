@@ -28,4 +28,4 @@ GAMEDIR=$(dirname "${SCRIPT}")
 cd $GAMEDIR
 
 export LD_LIBRARY_PATH="./lib"
-./mwiniimport.@ARCH@ "$@"
+./openmw-iniimporter.@ARCH@ "$@"

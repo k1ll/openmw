@@ -19,10 +19,10 @@ target_link_libraries(openmw-iniimporter
 )
 
 if(BUILD_TGZ)
-    INSTALL(TARGETS mwiniimport RUNTIME DESTINATION "." COMPONENT mwiniimport)
+    INSTALL(TARGETS openmw-iniimporter RUNTIME DESTINATION "." COMPONENT openmw-iniimporter)
     exec_program("uname" ARGS "-m" OUTPUT_VARIABLE ARCH)
-    SET_TARGET_PROPERTIES(mwiniimport
-                          PROPERTIES OUTPUT_NAME mwiniimport.${ARCH})
+    SET_TARGET_PROPERTIES(openmw-iniimporter
+                          PROPERTIES OUTPUT_NAME openmw-iniimporter.${ARCH})
 else()
     if(DPKG_PROGRAM)
         INSTALL(TARGETS mwiniimport RUNTIME DESTINATION games COMPONENT mwiniimport)

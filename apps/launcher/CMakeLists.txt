@@ -98,10 +98,10 @@ target_link_libraries(openmw-launcher
 
 
 if(BUILD_TGZ)
-	INSTALL(TARGETS omwlauncher RUNTIME DESTINATION . COMPONENT omwlauncher)
+	INSTALL(TARGETS openmw-launcher RUNTIME DESTINATION . COMPONENT openmw-launcher)
 	exec_program("uname" ARGS "-m" OUTPUT_VARIABLE ARCH)
-	SET_TARGET_PROPERTIES(omwlauncher
-		                  PROPERTIES OUTPUT_NAME omwlauncher.${ARCH})
+	SET_TARGET_PROPERTIES(openmw-launcher
+		                  PROPERTIES OUTPUT_NAME openmw-launcher.${ARCH})
 endif(BUILD_TGZ)
 
 if (BUILD_WITH_CODE_COVERAGE)
