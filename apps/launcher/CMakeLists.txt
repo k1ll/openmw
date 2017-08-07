@@ -105,6 +105,13 @@ else()
     qt5_use_modules(openmw-launcher Widgets Core)
 endif()
 
+if(BUILD_TGZ)
+	INSTALL(TARGETS openmw-launcher RUNTIME DESTINATION . COMPONENT openmw-launcher)
+	exec_program("uname" ARGS "-m" OUTPUT_VARIABLE ARCH)
+	SET_TARGET_PROPERTIES(openmw-launcher
+		                  PROPERTIES OUTPUT_NAME openmw-launcher.${ARCH})
+endif(BUILD_TGZ)
+
 if (BUILD_WITH_CODE_COVERAGE)
   add_definitions (--coverage)
   target_link_libraries(openmw-launcher gcov)

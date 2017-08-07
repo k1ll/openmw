@@ -19,6 +19,13 @@ target_link_libraries(openmw-iniimporter
     components
 )
 
+if(BUILD_TGZ)
+    INSTALL(TARGETS openmw-iniimporter RUNTIME DESTINATION "." COMPONENT openmw-iniimporter)
+    exec_program("uname" ARGS "-m" OUTPUT_VARIABLE ARCH)
+    SET_TARGET_PROPERTIES(openmw-iniimporter
+                          PROPERTIES OUTPUT_NAME openmw-iniimporter.${ARCH})
+endif(BUILD_TGZ)
+
 if (WIN32)
     target_link_libraries(openmw-iniimporter
     ${Boost_LOCALE_LIBRARY})

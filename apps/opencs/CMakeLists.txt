@@ -235,6 +235,13 @@ target_link_libraries(openmw-cs
     components
 )
 
+if(BUILD_TGZ)
+    INSTALL(TARGETS openmw-cs RUNTIME DESTINATION "." COMPONENT openmw-cs)
+    exec_program("uname" ARGS "-m" OUTPUT_VARIABLE ARCH)
+    SET_TARGET_PROPERTIES(openmw-cs
+                          PROPERTIES OUTPUT_NAME openmw-cs.${ARCH})
+endif(BUILD_TGZ)
+
 if (DESIRED_QT_VERSION MATCHES 4)
     target_link_libraries(openmw-cs
     ${QT_QTGUI_LIBRARY}
